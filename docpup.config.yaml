@@ -1,0 +1,42 @@
+# Docpup configuration
+# See README.md for full documentation
+
+docsDir: documentation
+indicesDir: documentation/indices
+
+gitignore:
+  addDocsDir: true
+  addIndexFiles: false
+  sectionHeader: "Docpup generated docs"
+
+scan:
+  includeMd: true
+  includeMdx: true
+  excludeDirs:
+    - node_modules
+    - images
+    - img
+    - media
+    - assets
+    - css
+    - fonts
+
+# Concurrency: number of repos to process in parallel (default: 2)
+concurrency: 2
+
+repos:
+  - name: nextjs
+    repo: https://github.com/vercel/next.js
+    sourcePath: docs
+
+  - name: axum
+    repo: https://github.com/tokio-rs/axum
+    sourcePath: .
+
+  - name: temporal
+    repo: https://github.com/temporalio/documentation
+    sourcePath: docs
+
+  - name: auth0
+    repo: https://github.com/auth0/docs
+    sourcePath: articles

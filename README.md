@@ -1,0 +1,154 @@
+# docpup
+
+CLI tool to clone GitHub documentation and generate AGENTS.md indexes for AI coding agents.
+
+## What it does
+
+Docpup fetches documentation from GitHub repositories using sparse checkout, copies only markdown files (`.md` and `.mdx`) to a local directory, and generates compact index files in the AGENTS.md format. These indexes provide persistent context to AI coding agents.
+
+## Installation
+
+```bash
+npm install -g docpup
+```
+
+Or run directly with npx:
+
+```bash
+npx docpup generate
+```
+
+## Quick Start
+
+1. Create a `docpup.config.yaml` in your project root:
+
+```yaml
+docsDir: documentation
+indicesDir: documentation/indices
+repos:
+  - name: nextjs
+    repo: https://github.com/vercel/next.js
+    sourcePath: docs
+```
+
+2. Run docpup:
+
+```bash
+docpup generate
+```
+
+3. Find your docs in `documentation/nextjs/` and the index in `documentation/indices/nextjs-index.md`
+
+## Configuration
+
+### Full Configuration Example
+
+```yaml
+docsDir: documentation
+indicesDir: documentation/indices
+
+gitignore:
+  addDocsDir: true
+  addIndexFiles: false
+  sectionHeader: "Docpup generated docs"
+
+scan:
+  includeMd: true
+  includeMdx: true
+  excludeDirs:
+    - node_modules
+    - images
+    - assets
+
+concurrency: 2
+
+repos:
+  - name: nextjs
+    repo: https://github.com/vercel/next.js
+    sourcePath: docs
+
+  - name: mylib
+    repo: https://github.com/org/mylib
+    sourcePath: documentation
+    ref: v2.0.0  # optional: specific branch/tag
+```
+
+### Configuration Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `docsDir` | string | `"documentation"` | Output directory for copied docs |
+| `indicesDir` | string | `"documentation/indices"` | Output directory for index files |
+| `gitignore.addDocsDir` | boolean | `true` | Add docs directories to .gitignore |
+| `gitignore.addIndexFiles` | boolean | `false` | Add index files to .gitignore |
+| `gitignore.sectionHeader` | string | `"Docpup generated docs"` | Header for .gitignore section |
+| `scan.includeMd` | boolean | `true` | Include .md files |
+| `scan.includeMdx` | boolean | `true` | Include .mdx files |
+| `scan.excludeDirs` | string[] | `["node_modules", ...]` | Directories to exclude |
+| `concurrency` | number | `2` | Number of repos to process in parallel |
+
+### Repo Configuration
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `name` | string | Yes | Unique identifier for this repo |
+| `repo` | string | Yes | GitHub repository URL |
+| `sourcePath` | string | Yes | Path to docs directory within the repo (use `.` for root) |
+| `ref` | string | No | Branch, tag, or commit (auto-detects default branch if not specified) |
+
+## CLI Usage
+
+```bash
+# Run with default config
+docpup generate
+
+# Specify config file
+docpup generate --config ./custom-config.yaml
+
+# Process only specific repos
+docpup generate --only nextjs temporal
+
+# Override concurrency
+docpup generate --concurrency 4
+
+# Show help
+docpup --help
+
+# Show version
+docpup --version
+```
+
+## Index File Format
+
+Docpup generates index files in the AGENTS.md format:
+
+```
+<!-- NEXTJS-AGENTS-MD-START -->[nextjs Docs Index]|root: documentation/nextjs|STOP. What you remember about nextjs may be WRONG for this project. Always search docs and read before any task.|(root):{index.mdx}|(guides):{setup.md,intro.md}<!-- NEXTJS-AGENTS-MD-END -->
+```
+
+This compact format provides:
+- Start/end markers for easy parsing
+- Root path for the documentation
+- Warning to always check docs before making assumptions
+- Directory-to-file mapping for quick lookup
+
+## Authentication
+
+Docpup uses your existing git credentials (SSH keys, credential helpers, or stored tokens). No additional authentication configuration is required.
+
+For private repositories, ensure you have access configured in your git environment.
+
+## Error Handling
+
+- If a repository fails to clone, docpup logs a warning and continues with other repos
+- The CLI always exits with status 0 if it can continue running (non-fatal errors)
+- Invalid configuration or unexpected errors result in non-zero exit
+
+## Requirements
+
+- Node.js 20 or later
+- Git 2.25 or later (for sparse-checkout support)
+
+## License
+
+MIT
