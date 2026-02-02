@@ -104,11 +104,11 @@ repos:
 | `preprocess` | object | No | Optional preprocess step (currently only Sphinx) |
 | `scan` | object | No | Per-repo scan overrides (merged with global scan config) |
 
-### Preprocess 
+### Preprocess
 
 Note that `preprocess` only supports Sphinx for now, but is extensible to utilize any required preprocessor.
 
-The Spinx preprocessor uses ([Sphinx](https://github.com/sphinx-doc/sphinx)) to build docs before scanning. 
+The Sphinx preprocessor uses ([Sphinx](https://github.com/sphinx-doc/sphinx)) to build docs before scanning.
 This is useful for projects like Django that rely on reStructuredText includes, substitutions, and directives.
 
 ```yaml
@@ -122,6 +122,10 @@ repos:
       builder: markdown
       outputDir: docpup-build
 ```
+
+Prerequisites:
+- Python 3 on PATH (`python`)
+- Sphinx + Markdown builder: `python -m pip install sphinx sphinx-markdown-builder`
 
 Notes:
 - `sourcePath` must exist in the repo (used for sparse checkout).

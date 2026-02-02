@@ -111,6 +111,30 @@ async function runSphinxPreprocess(
   const workDirArg = path.relative(checkoutRoot, resolvedWorkDir) || ".";
   const outputDirArg = path.relative(checkoutRoot, resolvedOutputDir) || ".";
 
+  const formatSphinxFailure = (error: unknown): string => {
+    const err = error as { code?: string; stderr?: string };
+    const message = error instanceof Error ? error.message : String(error);
+    const stderr = err?.stderr ?? "";
+    const combined = `${stderr}\n${message}`.toLowerCase();
+
+    if (err?.code === "ENOENT" || combined.includes("enoent")) {
+      return 'Python not found. Install Python 3 and ensure "python" is on PATH.';
+    }
+
+    if (
+      combined.includes("no module named") &&
+      (combined.includes("sphinx") || combined.includes("sphinx_markdown_builder"))
+    ) {
+      return "Sphinx is not installed. Run: python -m pip install sphinx sphinx-markdown-builder";
+    }
+
+    if (combined.includes("builder name") && combined.includes("markdown")) {
+      return "Markdown builder is unavailable. Install sphinx-markdown-builder and ensure it is accessible to Sphinx.";
+    }
+
+    return message;
+  };
+
   try {
     await execa(
       "python",
@@ -121,10 +145,8 @@ async function runSphinxPreprocess(
       }
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(
-      `Sphinx preprocess failed for ${repo.name}: ${message}. Ensure Python, Sphinx, and sphinx-markdown-builder are installed.`
-    );
+    const detail = formatSphinxFailure(error);
+    throw new Error(`Sphinx preprocess failed for ${repo.name}: ${detail}`);
   }
 
   return resolvedOutputDir;
