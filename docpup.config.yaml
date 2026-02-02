@@ -1,0 +1,23 @@
+docsDir: documentation
+indicesDir: documentation/indices
+gitignore:
+  addDocsDir: true
+  addIndexFiles: false
+  sectionHeader: "Docpup generated docs"
+scan:
+  includeMd: true
+  includeMdx: true
+  includeHiddenDirs: false
+  excludeDirs:
+    - .git
+    - node_modules
+    - images
+    - img
+    - media
+    - assets
+    - css
+    - fonts
+repos:
+  - name: hello-world
+    repo: https://github.com/octocat/Hello-World
+    sourcePath: .
