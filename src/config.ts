@@ -14,8 +14,16 @@ const defaultExcludeDirs = [
   "fonts",
 ];
 
+const repoNamePattern = /^[A-Za-z0-9._-]+$/;
+
 const repoSchema = z.object({
-  name: z.string().min(1),
+  name: z
+    .string()
+    .min(1)
+    .regex(
+      repoNamePattern,
+      "Repo name must contain only letters, numbers, '.', '_', or '-'"
+    ),
   repo: z.string().min(1),
   sourcePath: z.string().min(1),
   ref: z.string().min(1).optional(),
@@ -61,7 +69,8 @@ const configSchema = z.object({
 });
 
 export async function loadConfig(
-  configPath?: string
+  configPath?: string,
+  baseDir: string = process.cwd()
 ): Promise<{ config: DocpupConfig; configDir: string }> {
   const explorer = cosmiconfig("docpup", {
     searchPlaces: [
@@ -75,11 +84,11 @@ export async function loadConfig(
   });
 
   const resolvedPath = configPath
-    ? path.resolve(process.cwd(), configPath)
+    ? path.resolve(baseDir, configPath)
     : undefined;
   const result = resolvedPath
     ? await explorer.load(resolvedPath)
-    : await explorer.search();
+    : await explorer.search(baseDir);
 
   if (!result || result.isEmpty) {
     throw new Error(

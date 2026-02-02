@@ -59,4 +59,19 @@ describe("buildIndex", () => {
     expect(result).toContain("<!-- EMPTY-AGENTS-MD-END -->");
     expect(result).toContain("[empty Docs Index]");
   });
+
+  it("should escape delimiters in directories and filenames", () => {
+    const tree = new Map<string, string[]>([
+      ["api|v1", ["guide,one.md", "ref{1}.md", "path:2.md", "back\\slash.md"]],
+      ["", ["README.md"]],
+    ]);
+
+    const result = buildIndex(tree, "mylib", "docs/mylib");
+
+    expect(result).toContain("api\\|v1:{");
+    expect(result).toContain("guide\\,one.md");
+    expect(result).toContain("ref\\{1\\}.md");
+    expect(result).toContain("path\\:2.md");
+    expect(result).toContain("back\\\\slash.md");
+  });
 });

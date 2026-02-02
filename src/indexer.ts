@@ -2,6 +2,10 @@ function toMarkerName(name: string) {
   return name.trim().toUpperCase().replace(/[^A-Z0-9-]/g, "-");
 }
 
+function escapeToken(value: string) {
+  return value.replace(/\\/g, "\\\\").replace(/[|{},:]/g, (char) => `\\${char}`);
+}
+
 export function buildIndex(
   tree: Map<string, string[]>,
   repoName: string,
@@ -14,12 +18,15 @@ export function buildIndex(
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([dir, files]) => {
       const label = dir === "" ? "(root)" : dir;
-      const fileList = [...files].sort((a, b) => a.localeCompare(b)).join(",");
-      return `${label}:{${fileList}}`;
+      const fileList = [...files]
+        .sort((a, b) => a.localeCompare(b))
+        .map(escapeToken)
+        .join(",");
+      return `${escapeToken(label)}:{${fileList}}`;
     })
     .join("|");
 
-  const root = `root: ${docsRootRelPath}`;
+  const root = `root: ${escapeToken(docsRootRelPath)}`;
   const header = `<!-- ${markerName}-AGENTS-MD-START -->`;
   const footer = `<!-- ${markerName}-AGENTS-MD-END -->`;
   const entriesSection = entries ? `|${entries}` : "";

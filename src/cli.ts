@@ -24,6 +24,15 @@ function withTrailingSlash(input: string) {
   return input.endsWith("/") ? input : `${input}/`;
 }
 
+function resolveInside(root: string, ...segments: string[]) {
+  const resolved = path.resolve(root, ...segments);
+  const relative = path.relative(root, resolved);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new Error(`Resolved path escapes root: ${resolved}`);
+  }
+  return resolved;
+}
+
 function parseOnly(only?: string) {
   if (!only) return [];
   return only
@@ -66,7 +75,7 @@ export async function generateDocs(
   options: GenerateOptions
 ): Promise<GenerateSummary> {
   const repoRoot = options.cwd ?? process.cwd();
-  const { config } = await loadConfig(options.config);
+  const { config } = await loadConfig(options.config, repoRoot);
   const onlyNames = parseOnly(options.only);
 
   let repos = config.repos;
@@ -139,7 +148,7 @@ export async function generateDocs(
         }
 
         const tree = await scanDocs(checkout.checkoutPath, config.scan);
-        const outputRepoDir = path.join(docsRoot, repo.name);
+        const outputRepoDir = resolveInside(docsRoot, repo.name);
         await fs.rm(outputRepoDir, { recursive: true, force: true });
         await fs.mkdir(outputRepoDir, { recursive: true });
         await copyDocs(checkout.checkoutPath, outputRepoDir, tree);
@@ -148,7 +157,7 @@ export async function generateDocs(
           path.relative(repoRoot, outputRepoDir)
         );
         const indexContents = buildIndex(tree, repo.name, docsRootRelPath);
-        const indexFilePath = path.join(
+        const indexFilePath = resolveInside(
           indicesRoot,
           `${repo.name}-index.md`
         );
