@@ -16,19 +16,6 @@ const defaultExcludeDirs = [
 
 const repoNamePattern = /^[A-Za-z0-9._-]+$/;
 
-const repoSchema = z.object({
-  name: z
-    .string()
-    .min(1)
-    .regex(
-      repoNamePattern,
-      "Repo name must contain only letters, numbers, '.', '_', or '-'"
-    ),
-  repo: z.string().min(1),
-  sourcePath: z.string().min(1),
-  ref: z.string().min(1).optional(),
-});
-
 const defaultGitignore = {
   addDocsDir: true,
   addIndexFiles: false,
@@ -58,6 +45,28 @@ const scanSchema = z
     excludeDirs: z.array(z.string()).optional(),
   })
   .optional();
+
+const repoSchema = z.object({
+  name: z
+    .string()
+    .min(1)
+    .regex(
+      repoNamePattern,
+      "Repo name must contain only letters, numbers, '.', '_', or '-'"
+    ),
+  repo: z.string().min(1),
+  sourcePath: z.string().min(1),
+  ref: z.string().min(1).optional(),
+  preprocess: z
+    .object({
+      type: z.literal("sphinx"),
+      workDir: z.string().min(1).optional(),
+      builder: z.literal("markdown").default("markdown"),
+      outputDir: z.string().min(1).default("docpup-build"),
+    })
+    .optional(),
+  scan: scanSchema,
+});
 
 const configSchema = z.object({
   docsDir: z.string().min(1).default("documentation"),
