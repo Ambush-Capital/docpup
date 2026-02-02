@@ -101,6 +101,32 @@ repos:
 | `repo` | string | Yes | GitHub repository URL |
 | `sourcePath` | string | Yes | Path to docs directory within the repo (use `.` for root) |
 | `ref` | string | No | Branch, tag, or commit (auto-detects default branch if not specified) |
+| `preprocess` | object | No | Optional preprocess step (currently only Sphinx) |
+| `scan` | object | No | Per-repo scan overrides (merged with global scan config) |
+
+### Preprocess 
+
+Note that `preprocess` only supports Sphinx for now, but is extensible to utilize any required preprocessor.
+
+The Spinx preprocessor uses ([Sphinx](https://github.com/sphinx-doc/sphinx)) to build docs before scanning. 
+This is useful for projects like Django that rely on reStructuredText includes, substitutions, and directives.
+
+```yaml
+repos:
+  - name: django-docs
+    repo: https://github.com/django/django
+    sourcePath: docs
+    preprocess:
+      type: sphinx
+      workDir: docs
+      builder: markdown
+      outputDir: docpup-build
+```
+
+Notes:
+- `sourcePath` must exist in the repo (used for sparse checkout).
+- `builder` must be `markdown` (requires `sphinx-markdown-builder`).
+- `outputDir` must be a non-hidden directory unless `scan.includeHiddenDirs` is true.
 
 ## CLI Usage
 
