@@ -65,6 +65,19 @@ function isLikelyFile(p: string): boolean {
   return /\.[a-zA-Z0-9]+$/.test(p) && !p.endsWith("/");
 }
 
+function buildNoConePatterns(paths: string[]): string {
+  const patterns = paths.flatMap((p) => {
+    if (!p || p === ".") {
+      return [];
+    }
+    if (isLikelyFile(p)) {
+      return [`/${p}`];
+    }
+    return [`/${p.replace(/\/+$/, "")}/**`];
+  });
+  return patterns.join("\n");
+}
+
 export async function sparseCheckoutRepo(
   args: SparseCheckoutArgs
 ): Promise<SparseCheckoutResult> {
@@ -82,9 +95,9 @@ export async function sparseCheckoutRepo(
 
     if (!hasRoot) {
       if (hasFiles) {
-        // No-cone mode for single files
+        // No-cone mode for file or mixed path selections
         await runGit(["sparse-checkout", "init", "--no-cone"], tempDir);
-        const patterns = normalizedPaths.map((p) => `/${p}`).join("\n");
+        const patterns = buildNoConePatterns(normalizedPaths);
         await fs.writeFile(
           path.join(tempDir, ".git/info/sparse-checkout"),
           patterns

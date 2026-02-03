@@ -24,6 +24,16 @@ function normalizeSourcePaths(repo: RepoConfig): string[] {
   throw new Error(`Repo ${repo.name}: either sourcePath or sourcePaths required`);
 }
 
+function getSingleSourcePath(repo: RepoConfig): string {
+  const sourcePaths = normalizeSourcePaths(repo);
+  if (sourcePaths.length !== 1) {
+    throw new Error(
+      `Repo ${repo.name}: preprocess requires a single sourcePath`
+    );
+  }
+  return sourcePaths[0];
+}
+
 const require = createRequire(import.meta.url);
 const packageJson = require("../package.json");
 
@@ -122,7 +132,7 @@ async function runSphinxPreprocess(
     );
   }
 
-  const workDir = preprocess.workDir ?? repo.sourcePath;
+  const workDir = preprocess.workDir ?? getSingleSourcePath(repo);
   const outputDir = preprocess.outputDir ?? "docpup-build";
   const resolvedWorkDir = resolveInside(checkoutRoot, workDir);
   const resolvedOutputDir = resolveInside(checkoutRoot, outputDir);

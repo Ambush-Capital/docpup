@@ -154,7 +154,8 @@ Prerequisites:
 - Sphinx + Markdown builder: `python -m pip install sphinx sphinx-markdown-builder`
 
 Notes:
-- `sourcePath` must exist in the repo (used for sparse checkout).
+- `sourcePath` (or a single entry in `sourcePaths`) must exist in the repo (used for sparse checkout).
+- If `workDir` is omitted, it defaults to `sourcePath` or the single `sourcePaths` entry.
 - `builder` must be `markdown` (requires `sphinx-markdown-builder`).
 - `outputDir` must be a non-hidden directory unless `scan.includeHiddenDirs` is true.
 - Preprocess is not supported with multiple `sourcePaths`.

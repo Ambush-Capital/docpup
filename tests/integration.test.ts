@@ -433,6 +433,56 @@ repos:
   }
 
   it(
+    "should index mixed file and directory paths",
+    async () => {
+      const projectDir = path.join(testDir, "mixed-paths-test");
+      await mkdir(projectDir, { recursive: true });
+
+      const config = `
+docsDir: documentation
+indicesDir: documentation/indices
+repos:
+  - name: codex-mixed
+    repo: https://github.com/openai/codex
+    contentType: source
+    sourcePaths:
+      - sdk/typescript/src
+      - sdk/typescript/README.md
+    scan:
+      extensions: [".ts", ".md"]
+`;
+      await writeFile(path.join(projectDir, "docpup.config.yaml"), config);
+
+      const result = await runDocpup(projectDir);
+
+      expect(result.exitCode).toBe(0);
+
+      const indexPath = path.join(
+        projectDir,
+        "documentation/indices/codex-mixed-index.md"
+      );
+      expect(await fileExists(indexPath)).toBe(true);
+
+      const indexContent = await readFile(indexPath, "utf-8");
+      expect(indexContent).toContain("README.md");
+
+      const readmePath = path.join(
+        projectDir,
+        "documentation/codex-mixed/sdk/typescript/README.md"
+      );
+      expect(await fileExists(readmePath)).toBe(true);
+
+      const srcDir = path.join(
+        projectDir,
+        "documentation/codex-mixed/sdk/typescript/src"
+      );
+      const tsCount = await countFilesWithExtension(srcDir, [".ts"]);
+      expect(tsCount).toBeGreaterThan(0);
+    },
+    TEST_TIMEOUT
+  );
+
+  it(
     "should filter by custom extensions",
     async () => {
       const projectDir = path.join(testDir, "custom-ext-test");
