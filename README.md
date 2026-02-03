@@ -58,6 +58,7 @@ indicesDir: documentation/indices
 
 gitignore:
   addDocsDir: true
+  addDocsSubDirs: false
   addIndexFiles: false
   sectionHeader: "Docpup generated docs"
 
@@ -108,6 +109,7 @@ repos:
 | `docsDir` | string | `"documentation"` | Output directory for copied docs |
 | `indicesDir` | string | `"documentation/indices"` | Output directory for index files |
 | `gitignore.addDocsDir` | boolean | `true` | Add docs directory to .gitignore |
+| `gitignore.addDocsSubDirs` | boolean | `false` | Add per-repo subdirectories to .gitignore (e.g., `docs/nextjs/`) instead of whole docs dir |
 | `gitignore.addIndexFiles` | boolean | `false` | Add indices directory to .gitignore |
 | `gitignore.sectionHeader` | string | `"Docpup generated docs"` | Header for .gitignore section |
 | `scan.includeMd` | boolean | `true` | Include .md files (ignored if `extensions` is set) |
