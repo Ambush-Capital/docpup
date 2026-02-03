@@ -253,14 +253,19 @@ export async function generateDocs(
   const docsIgnoreEntry = gitignoreConfig.addDocsDir
     ? toGitignoreDirEntry(repoRoot, docsRoot)
     : undefined;
+  const docsSubDirEntries = gitignoreConfig.addDocsSubDirs
+    ? repos.map((repo) => toGitignoreDirEntry(repoRoot, path.join(docsRoot, repo.name)))
+        .filter((entry): entry is string => Boolean(entry))
+    : [];
   const indexIgnoreEntry = gitignoreConfig.addIndexFiles
     ? toGitignoreDirEntry(repoRoot, indicesRoot)
     : undefined;
 
-  if (docsIgnoreEntry || indexIgnoreEntry) {
+  if (docsIgnoreEntry || docsSubDirEntries.length > 0 || indexIgnoreEntry) {
     gitignoreQueue = updateGitignore({
       repoRoot,
       docsEntry: docsIgnoreEntry,
+      docsSubDirEntries,
       indexEntry: indexIgnoreEntry,
       sectionHeader: gitignoreConfig.sectionHeader,
     }).catch((error) => {

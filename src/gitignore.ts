@@ -4,6 +4,7 @@ import path from "node:path";
 export async function updateGitignore(args: {
   repoRoot: string;
   docsEntry?: string;
+  docsSubDirEntries?: string[];
   indexEntry?: string;
   sectionHeader: string;
 }) {
@@ -14,9 +15,11 @@ export async function updateGitignore(args: {
   const lines = existingContent.split(/\r?\n/);
   const headerLine = `# ${args.sectionHeader}`;
 
-  const entries = [args.docsEntry, args.indexEntry].filter(
-    (entry): entry is string => Boolean(entry)
-  );
+  const entries = [
+    args.docsEntry,
+    ...(args.docsSubDirEntries ?? []),
+    args.indexEntry,
+  ].filter((entry): entry is string => Boolean(entry));
   if (entries.length === 0) {
     return;
   }

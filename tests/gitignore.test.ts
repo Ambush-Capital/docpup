@@ -108,4 +108,57 @@ describe("updateGitignore", () => {
     expect(content).toContain("docs/repo1/");
     expect(content).toContain("docs/indices/repo1-index.md");
   });
+
+  it("should add multiple docsSubDirEntries", async () => {
+    await updateGitignore({
+      repoRoot: tempDir,
+      docsSubDirEntries: ["docs/repo1/", "docs/repo2/", "docs/repo3/"],
+      sectionHeader: "Docpup generated docs",
+    });
+
+    const content = await readFile(path.join(tempDir, ".gitignore"), "utf-8");
+
+    expect(content).toContain("# Docpup generated docs");
+    expect(content).toContain("docs/repo1/");
+    expect(content).toContain("docs/repo2/");
+    expect(content).toContain("docs/repo3/");
+  });
+
+  it("should not duplicate docsSubDirEntries on subsequent calls", async () => {
+    await updateGitignore({
+      repoRoot: tempDir,
+      docsSubDirEntries: ["docs/repo1/", "docs/repo2/"],
+      sectionHeader: "Docpup generated docs",
+    });
+
+    await updateGitignore({
+      repoRoot: tempDir,
+      docsSubDirEntries: ["docs/repo1/", "docs/repo3/"],
+      sectionHeader: "Docpup generated docs",
+    });
+
+    const content = await readFile(path.join(tempDir, ".gitignore"), "utf-8");
+    const repo1Matches = content.match(/docs\/repo1\//g);
+    const repo2Matches = content.match(/docs\/repo2\//g);
+    const repo3Matches = content.match(/docs\/repo3\//g);
+
+    expect(repo1Matches?.length).toBe(1);
+    expect(repo2Matches?.length).toBe(1);
+    expect(repo3Matches?.length).toBe(1);
+  });
+
+  it("should combine docsEntry and docsSubDirEntries", async () => {
+    await updateGitignore({
+      repoRoot: tempDir,
+      docsEntry: "docs/",
+      docsSubDirEntries: ["docs/repo1/", "docs/repo2/"],
+      sectionHeader: "Docpup generated docs",
+    });
+
+    const content = await readFile(path.join(tempDir, ".gitignore"), "utf-8");
+
+    expect(content).toContain("docs/");
+    expect(content).toContain("docs/repo1/");
+    expect(content).toContain("docs/repo2/");
+  });
 });

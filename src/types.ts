@@ -31,6 +31,7 @@ export type DocpupConfig = {
   indicesDir: string;
   gitignore: {
     addDocsDir: boolean;
+    addDocsSubDirs: boolean;
     addIndexFiles: boolean;
     sectionHeader: string;
   };

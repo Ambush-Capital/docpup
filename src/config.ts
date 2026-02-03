@@ -18,6 +18,7 @@ const repoNamePattern = /^[A-Za-z0-9._-]+$/;
 
 const defaultGitignore = {
   addDocsDir: true,
+  addDocsSubDirs: false,
   addIndexFiles: false,
   sectionHeader: "Docpup generated docs",
 };
@@ -32,6 +33,7 @@ const defaultScan = {
 const gitignoreSchema = z
   .object({
     addDocsDir: z.boolean().optional(),
+    addDocsSubDirs: z.boolean().optional(),
     addIndexFiles: z.boolean().optional(),
     sectionHeader: z.string().min(1).optional(),
   })
