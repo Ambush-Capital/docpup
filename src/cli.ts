@@ -9,10 +9,20 @@ import pLimit from "p-limit";
 import { execa } from "execa";
 import { loadConfig } from "./config.js";
 import { sparseCheckoutRepo } from "./git.js";
-import { scanDocs } from "./scanner.js";
+import { scanDocs, scanMultiplePaths } from "./scanner.js";
 import { buildIndex } from "./indexer.js";
 import { updateGitignore } from "./gitignore.js";
 import type { DocpupConfig, RepoConfig } from "./types.js";
+
+function normalizeSourcePaths(repo: RepoConfig): string[] {
+  if (repo.sourcePaths && repo.sourcePaths.length > 0) {
+    return repo.sourcePaths;
+  }
+  if (repo.sourcePath) {
+    return [repo.sourcePath];
+  }
+  throw new Error(`Repo ${repo.name}: either sourcePath or sourcePaths required`);
+}
 
 const require = createRequire(import.meta.url);
 const packageJson = require("../package.json");
@@ -68,8 +78,17 @@ export function mergeScanConfig(
 async function copyDocs(
   sourceRoot: string,
   targetRoot: string,
-  tree: Map<string, string[]>
+  tree: Map<string, string[]>,
+  isSingleFile = false
 ) {
+  if (isSingleFile) {
+    // sourceRoot is a file path, not a directory
+    const fileName = path.basename(sourceRoot);
+    await fs.mkdir(targetRoot, { recursive: true });
+    await fs.copyFile(sourceRoot, path.join(targetRoot, fileName));
+    return;
+  }
+
   for (const [dir, files] of tree.entries()) {
     const sourceDir = dir ? path.join(sourceRoot, dir) : sourceRoot;
     const targetDir = dir ? path.join(targetRoot, dir) : targetRoot;
@@ -255,9 +274,10 @@ export async function generateDocs(
 
       const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "docpup-"));
       try {
+        const sourcePaths = normalizeSourcePaths(repo);
         const checkout = await sparseCheckoutRepo({
           repoUrl: repo.repo,
-          sourcePath: repo.sourcePath,
+          sourcePaths,
           ref: repo.ref,
           tempDir,
         });
@@ -269,25 +289,58 @@ export async function generateDocs(
           return;
         }
 
-        const scanRoot = repo.preprocess
-          ? await runSphinxPreprocess(tempDir, repo)
-          : checkout.checkoutPath;
         const scanConfig = mergeScanConfig(config.scan, repo.scan);
-        const tree = await scanDocs(scanRoot, scanConfig);
-        if (repo.preprocess && tree.size === 0) {
-          throw new Error(
-            `Sphinx preprocess produced no markdown files for ${repo.name}. Check builder output and scan settings.`
-          );
-        }
-        const outputRepoDir = resolveInside(docsRoot, repo.name);
-        await fs.rm(outputRepoDir, { recursive: true, force: true });
-        await fs.mkdir(outputRepoDir, { recursive: true });
-        await copyDocs(scanRoot, outputRepoDir, tree);
+        let tree: Map<string, string[]>;
 
+        if (repo.preprocess) {
+          // Preprocess only works with single path
+          const scanRoot = await runSphinxPreprocess(tempDir, repo);
+          tree = await scanDocs(scanRoot, scanConfig);
+          if (tree.size === 0) {
+            throw new Error(
+              `Sphinx preprocess produced no markdown files for ${repo.name}. Check builder output and scan settings.`
+            );
+          }
+          const outputRepoDir = resolveInside(docsRoot, repo.name);
+          await fs.rm(outputRepoDir, { recursive: true, force: true });
+          await fs.mkdir(outputRepoDir, { recursive: true });
+          await copyDocs(scanRoot, outputRepoDir, tree);
+        } else {
+          // Scan and copy from multiple paths
+          tree = await scanMultiplePaths(checkout.checkoutPaths, scanConfig, tempDir);
+          const outputRepoDir = resolveInside(docsRoot, repo.name);
+          await fs.rm(outputRepoDir, { recursive: true, force: true });
+          await fs.mkdir(outputRepoDir, { recursive: true });
+
+          // Copy from each checkout path preserving relative structure
+          for (const checkoutPath of checkout.checkoutPaths) {
+            const relativePath = path.relative(tempDir, checkoutPath);
+            const pathTree = await scanDocs(checkoutPath, scanConfig);
+            if (pathTree.size > 0) {
+              const targetDir =
+                relativePath && relativePath !== "."
+                  ? path.join(outputRepoDir, relativePath)
+                  : outputRepoDir;
+              // Detect if checkoutPath is a single file
+              const pathStat = await fs.stat(checkoutPath);
+              const isSingleFile = pathStat.isFile();
+              if (isSingleFile) {
+                // For single files, the targetDir should be the parent directory
+                const parentDir = path.dirname(targetDir);
+                await copyDocs(checkoutPath, parentDir, pathTree, true);
+              } else {
+                await copyDocs(checkoutPath, targetDir, pathTree);
+              }
+            }
+          }
+        }
+
+        const outputRepoDir = resolveInside(docsRoot, repo.name);
         const docsRootRelPath = toPosix(
           path.relative(repoRoot, outputRepoDir)
         );
-        const indexContents = buildIndex(tree, repo.name, docsRootRelPath);
+        const contentType = repo.contentType ?? "docs";
+        const indexContents = buildIndex(tree, repo.name, docsRootRelPath, contentType);
         const indexFilePath = resolveInside(
           indicesRoot,
           `${repo.name}-index.md`

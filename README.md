@@ -1,10 +1,16 @@
 # docpup
 
-CLI tool to clone GitHub documentation and generate AGENTS.md indexes for AI coding agents.
+CLI tool to clone GitHub documentation and source code, generating AGENTS.md indexes for AI coding agents.
 
 ## What it does
 
-Docpup fetches documentation from GitHub repositories using sparse checkout, copies only markdown files (`.md` and `.mdx`) to a local directory, and generates compact index files in the AGENTS.md format. These indexes provide persistent context to AI coding agents.
+Docpup fetches documentation or source code from GitHub repositories using sparse checkout, copies files to a local directory, and generates compact index files in the AGENTS.md format. These indexes provide persistent context to AI coding agents.
+
+Supports:
+- Documentation files (`.md`, `.mdx`)
+- Source code with custom extensions (`.ts`, `.js`, `.py`, etc.)
+- Selective directory fetching (e.g., only `src` and `samples`)
+- Single file fetching (e.g., just `README.md`)
 
 Paths in the config are resolved from the current working directory where you run the CLI.
 
@@ -68,6 +74,7 @@ scan:
 concurrency: 2
 
 repos:
+  # Traditional documentation indexing
   - name: nextjs
     repo: https://github.com/vercel/next.js
     sourcePath: docs
@@ -76,6 +83,22 @@ repos:
   - name: auth0-docs
     repo: https://github.com/auth0/docs-v2
     sourcePath: main/docs
+
+  # Source code indexing with multiple directories
+  - name: codex-sdk
+    repo: https://github.com/openai/codex
+    contentType: source
+    sourcePaths:
+      - sdk/typescript/src
+      - sdk/typescript/samples
+    scan:
+      extensions: [".ts", ".tsx"]
+
+  # Single file indexing
+  - name: codex-readme
+    repo: https://github.com/openai/codex
+    sourcePaths:
+      - sdk/typescript/README.md
 ```
 
 ### Configuration Options
@@ -87,10 +110,11 @@ repos:
 | `gitignore.addDocsDir` | boolean | `true` | Add docs directory to .gitignore |
 | `gitignore.addIndexFiles` | boolean | `false` | Add indices directory to .gitignore |
 | `gitignore.sectionHeader` | string | `"Docpup generated docs"` | Header for .gitignore section |
-| `scan.includeMd` | boolean | `true` | Include .md files |
-| `scan.includeMdx` | boolean | `true` | Include .mdx files |
+| `scan.includeMd` | boolean | `true` | Include .md files (ignored if `extensions` is set) |
+| `scan.includeMdx` | boolean | `true` | Include .mdx files (ignored if `extensions` is set) |
 | `scan.includeHiddenDirs` | boolean | `false` | Scan hidden directories (dotfolders) |
 | `scan.excludeDirs` | string[] | `[...]` | Directories to exclude |
+| `scan.extensions` | string[] | - | Custom file extensions to include (e.g., `[".ts", ".js"]`). Overrides `includeMd`/`includeMdx` |
 | `concurrency` | number | `2` | Number of repos to process in parallel |
 
 ### Repo Configuration
@@ -99,9 +123,11 @@ repos:
 |--------|------|----------|-------------|
 | `name` | string | Yes | Unique identifier for this repo |
 | `repo` | string | Yes | GitHub repository URL |
-| `sourcePath` | string | Yes | Path to docs directory within the repo (use `.` for root) |
+| `sourcePath` | string | One of `sourcePath` or `sourcePaths` | Single path to fetch (use `.` for root) |
+| `sourcePaths` | string[] | One of `sourcePath` or `sourcePaths` | Multiple paths to fetch (directories or single files) |
 | `ref` | string | No | Branch, tag, or commit (auto-detects default branch if not specified) |
-| `preprocess` | object | No | Optional preprocess step (currently only Sphinx) |
+| `contentType` | string | No | `"docs"` (default) or `"source"` - affects index title and warning message |
+| `preprocess` | object | No | Optional preprocess step (currently only Sphinx, single path only) |
 | `scan` | object | No | Per-repo scan overrides (merged with global scan config) |
 
 ### Preprocess
@@ -131,6 +157,43 @@ Notes:
 - `sourcePath` must exist in the repo (used for sparse checkout).
 - `builder` must be `markdown` (requires `sphinx-markdown-builder`).
 - `outputDir` must be a non-hidden directory unless `scan.includeHiddenDirs` is true.
+- Preprocess is not supported with multiple `sourcePaths`.
+
+### Source Code Indexing
+
+Docpup can index source code in addition to documentation. Use `contentType: source` and custom `extensions` to fetch specific file types:
+
+```yaml
+repos:
+  - name: my-sdk
+    repo: https://github.com/example/sdk
+    contentType: source
+    sourcePaths:
+      - src
+      - samples
+    scan:
+      extensions: [".ts", ".tsx", ".js"]
+      excludeDirs: [node_modules, dist, __tests__]
+```
+
+This generates an index with a "Source Index" title and appropriate warning:
+
+```
+<!-- MY-SDK-AGENTS-MD-START -->[my-sdk Source Index]|root: documentation/my-sdk|STOP. This is source code from my-sdk. Search and read files before making changes.|src:{index.ts,client.ts}|samples:{basic.ts}<!-- MY-SDK-AGENTS-MD-END -->
+```
+
+### Single File Fetching
+
+You can fetch individual files by specifying file paths in `sourcePaths`:
+
+```yaml
+repos:
+  - name: project-readme
+    repo: https://github.com/example/project
+    sourcePaths:
+      - README.md
+      - docs/CONTRIBUTING.md
+```
 
 ## CLI Usage
 
@@ -158,15 +221,21 @@ docpup --version
 
 Docpup generates index files in the AGENTS.md format:
 
+**Documentation Index:**
 ```
 <!-- NEXTJS-AGENTS-MD-START -->[nextjs Docs Index]|root: documentation/nextjs|STOP. What you remember about nextjs may be WRONG for this project. Always search docs and read before any task.|(root):{index.mdx}|guides:{setup.md,intro.md}<!-- NEXTJS-AGENTS-MD-END -->
 ```
 
+**Source Code Index:**
+```
+<!-- CODEX-SDK-AGENTS-MD-START -->[codex-sdk Source Index]|root: documentation/codex-sdk|STOP. This is source code from codex-sdk. Search and read files before making changes.|sdk/typescript/src:{index.ts,client.ts}|sdk/typescript/samples:{basic.ts}<!-- CODEX-SDK-AGENTS-MD-END -->
+```
+
 This compact format provides:
 - Start/end markers for easy parsing
-- Root path for the documentation
-- Warning to always check docs before making assumptions
-- Directory-to-file mapping for quick lookup
+- Root path for the files
+- Context-aware warning (docs vs source code)
+- Directory-to-file mapping with preserved path structure
 
 ## Authentication
 
