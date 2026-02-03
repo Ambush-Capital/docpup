@@ -84,8 +84,8 @@ repos:
 |--------|------|---------|-------------|
 | `docsDir` | string | `"documentation"` | Output directory for copied docs |
 | `indicesDir` | string | `"documentation/indices"` | Output directory for index files |
-| `gitignore.addDocsDir` | boolean | `true` | Add docs directories to .gitignore |
-| `gitignore.addIndexFiles` | boolean | `false` | Add index files to .gitignore |
+| `gitignore.addDocsDir` | boolean | `true` | Add docs directory to .gitignore |
+| `gitignore.addIndexFiles` | boolean | `false` | Add indices directory to .gitignore |
 | `gitignore.sectionHeader` | string | `"Docpup generated docs"` | Header for .gitignore section |
 | `scan.includeMd` | boolean | `true` | Include .md files |
 | `scan.includeMdx` | boolean | `true` | Include .mdx files |

@@ -25,6 +25,14 @@ function withTrailingSlash(input: string) {
   return input.endsWith("/") ? input : `${input}/`;
 }
 
+function toGitignoreDirEntry(root: string, targetDir: string) {
+  const relative = toPosix(path.relative(root, targetDir)).replace(/^\.\/+/, "");
+  if (!relative || relative === ".") {
+    return undefined;
+  }
+  return withTrailingSlash(relative);
+}
+
 function resolveInside(root: string, ...segments: string[]) {
   const resolved = path.resolve(root, ...segments);
   const relative = path.relative(root, resolved);
@@ -203,9 +211,6 @@ export async function generateDocs(
   let failed = 0;
   const failures: { name: string; error: string }[] = [];
 
-  let gitignoreQueue = Promise.resolve();
-  const gitignoreConfig = config.gitignore;
-
   const warn = (message: string) => {
     if (spinner.isSpinning) {
       spinner.stop();
@@ -213,6 +218,28 @@ export async function generateDocs(
     console.warn(message);
     spinner.start();
   };
+
+  let gitignoreQueue = Promise.resolve();
+  const gitignoreConfig = config.gitignore;
+  const docsIgnoreEntry = gitignoreConfig.addDocsDir
+    ? toGitignoreDirEntry(repoRoot, docsRoot)
+    : undefined;
+  const indexIgnoreEntry = gitignoreConfig.addIndexFiles
+    ? toGitignoreDirEntry(repoRoot, indicesRoot)
+    : undefined;
+
+  if (docsIgnoreEntry || indexIgnoreEntry) {
+    gitignoreQueue = updateGitignore({
+      repoRoot,
+      docsEntry: docsIgnoreEntry,
+      indexEntry: indexIgnoreEntry,
+      sectionHeader: gitignoreConfig.sectionHeader,
+    }).catch((error) => {
+      warn(
+        `Warning: failed to update .gitignore: ${error instanceof Error ? error.message : String(error)}`
+      );
+    });
+  }
 
   const updateProgress = (repoName?: string) => {
     const progressLabel = repoName
@@ -267,30 +294,6 @@ export async function generateDocs(
         );
         await fs.mkdir(path.dirname(indexFilePath), { recursive: true });
         await fs.writeFile(indexFilePath, indexContents);
-
-        if (gitignoreConfig.addDocsDir || gitignoreConfig.addIndexFiles) {
-          const docsEntry = gitignoreConfig.addDocsDir
-            ? withTrailingSlash(docsRootRelPath)
-            : undefined;
-          const indexEntry = gitignoreConfig.addIndexFiles
-            ? toPosix(path.relative(repoRoot, indexFilePath))
-            : undefined;
-
-          gitignoreQueue = gitignoreQueue
-            .then(() =>
-              updateGitignore({
-                repoRoot,
-                docsEntry,
-                indexEntry,
-                sectionHeader: gitignoreConfig.sectionHeader,
-              })
-            )
-            .catch((error) => {
-              warn(
-                `Warning: failed to update .gitignore for ${repo.name}: ${error instanceof Error ? error.message : String(error)}`
-              );
-            });
-        }
 
         succeeded += 1;
       } catch (error) {

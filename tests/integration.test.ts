@@ -272,8 +272,8 @@ repos:
       expect(await fileExists(gitignorePath)).toBe(true);
 
       const content = await readFile(gitignorePath, "utf-8");
-      expect(content).toContain("documentation/axum/");
-      expect(content).toContain("documentation/indices/axum-index.md");
+      expect(content).toContain("documentation/");
+      expect(content).toContain("documentation/indices/");
     },
     TEST_TIMEOUT
   );
