@@ -309,4 +309,214 @@ repos:
     },
     TEST_TIMEOUT
   );
+
+  it(
+    "should index a single file from a repo",
+    async () => {
+      const projectDir = path.join(testDir, "single-file-test");
+      await mkdir(projectDir, { recursive: true });
+
+      const config = `
+docsDir: documentation
+indicesDir: documentation/indices
+repos:
+  - name: codex-readme
+    repo: https://github.com/openai/codex
+    sourcePaths:
+      - sdk/typescript/README.md
+`;
+      await writeFile(path.join(projectDir, "docpup.config.yaml"), config);
+
+      const result = await runDocpup(projectDir);
+
+      expect(result.exitCode).toBe(0);
+
+      const indexPath = path.join(
+        projectDir,
+        "documentation/indices/codex-readme-index.md"
+      );
+      expect(await fileExists(indexPath)).toBe(true);
+
+      const indexContent = await readFile(indexPath, "utf-8");
+      expect(indexContent).toContain("<!-- CODEX-README-AGENTS-MD-START -->");
+      expect(indexContent).toContain("README.md");
+
+      // Check that only the single file was copied
+      const readmePath = path.join(
+        projectDir,
+        "documentation/codex-readme/sdk/typescript/README.md"
+      );
+      expect(await fileExists(readmePath)).toBe(true);
+    },
+    TEST_TIMEOUT
+  );
+
+  it(
+    "should index multiple directories with source content type",
+    async () => {
+      const projectDir = path.join(testDir, "multi-dir-source-test");
+      await mkdir(projectDir, { recursive: true });
+
+      const config = `
+docsDir: documentation
+indicesDir: documentation/indices
+repos:
+  - name: codex-sdk
+    repo: https://github.com/openai/codex
+    contentType: source
+    sourcePaths:
+      - sdk/typescript/src
+      - sdk/typescript/samples
+    scan:
+      extensions: [".ts", ".tsx"]
+`;
+      await writeFile(path.join(projectDir, "docpup.config.yaml"), config);
+
+      const result = await runDocpup(projectDir);
+
+      expect(result.exitCode).toBe(0);
+
+      const indexPath = path.join(
+        projectDir,
+        "documentation/indices/codex-sdk-index.md"
+      );
+      expect(await fileExists(indexPath)).toBe(true);
+
+      const indexContent = await readFile(indexPath, "utf-8");
+      // Should have Source Index title, not Docs Index
+      expect(indexContent).toContain("[codex-sdk Source Index]");
+      // Should have source-specific warning
+      expect(indexContent).toContain("This is source code from codex-sdk");
+      // Should NOT have the docs warning
+      expect(indexContent).not.toContain("What you remember about");
+
+      // Check that src directory was copied
+      const srcDir = path.join(
+        projectDir,
+        "documentation/codex-sdk/sdk/typescript/src"
+      );
+      expect(await fileExists(srcDir)).toBe(true);
+
+      // Check that samples directory was copied
+      const samplesDir = path.join(
+        projectDir,
+        "documentation/codex-sdk/sdk/typescript/samples"
+      );
+      expect(await fileExists(samplesDir)).toBe(true);
+    },
+    TEST_TIMEOUT
+  );
+
+  async function countFilesWithExtension(
+    dir: string,
+    extensions: string[]
+  ): Promise<number> {
+    let count = 0;
+    const extSet = new Set(extensions.map((e) => e.toLowerCase()));
+    async function walk(d: string): Promise<void> {
+      const entries = await readdir(d, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          await walk(path.join(d, entry.name));
+        } else if (entry.isFile()) {
+          const ext = path.extname(entry.name).toLowerCase();
+          if (extSet.has(ext)) {
+            count += 1;
+          }
+        }
+      }
+    }
+    if (await fileExists(dir)) {
+      await walk(dir);
+    }
+    return count;
+  }
+
+  it(
+    "should index mixed file and directory paths",
+    async () => {
+      const projectDir = path.join(testDir, "mixed-paths-test");
+      await mkdir(projectDir, { recursive: true });
+
+      const config = `
+docsDir: documentation
+indicesDir: documentation/indices
+repos:
+  - name: codex-mixed
+    repo: https://github.com/openai/codex
+    contentType: source
+    sourcePaths:
+      - sdk/typescript/src
+      - sdk/typescript/README.md
+    scan:
+      extensions: [".ts", ".md"]
+`;
+      await writeFile(path.join(projectDir, "docpup.config.yaml"), config);
+
+      const result = await runDocpup(projectDir);
+
+      expect(result.exitCode).toBe(0);
+
+      const indexPath = path.join(
+        projectDir,
+        "documentation/indices/codex-mixed-index.md"
+      );
+      expect(await fileExists(indexPath)).toBe(true);
+
+      const indexContent = await readFile(indexPath, "utf-8");
+      expect(indexContent).toContain("README.md");
+
+      const readmePath = path.join(
+        projectDir,
+        "documentation/codex-mixed/sdk/typescript/README.md"
+      );
+      expect(await fileExists(readmePath)).toBe(true);
+
+      const srcDir = path.join(
+        projectDir,
+        "documentation/codex-mixed/sdk/typescript/src"
+      );
+      const tsCount = await countFilesWithExtension(srcDir, [".ts"]);
+      expect(tsCount).toBeGreaterThan(0);
+    },
+    TEST_TIMEOUT
+  );
+
+  it(
+    "should filter by custom extensions",
+    async () => {
+      const projectDir = path.join(testDir, "custom-ext-test");
+      await mkdir(projectDir, { recursive: true });
+
+      const config = `
+docsDir: documentation
+indicesDir: documentation/indices
+repos:
+  - name: codex-ts-only
+    repo: https://github.com/openai/codex
+    contentType: source
+    sourcePaths:
+      - sdk/typescript/src
+    scan:
+      extensions: [".ts"]
+`;
+      await writeFile(path.join(projectDir, "docpup.config.yaml"), config);
+
+      const result = await runDocpup(projectDir);
+
+      expect(result.exitCode).toBe(0);
+
+      const docsDir = path.join(projectDir, "documentation/codex-ts-only");
+      const tsCount = await countFilesWithExtension(docsDir, [".ts"]);
+      const jsCount = await countFilesWithExtension(docsDir, [".js"]);
+      const mdCount = await countFilesWithExtension(docsDir, [".md"]);
+
+      // Should have at least one .ts file
+      expect(tsCount).toBeGreaterThan(0);
+      // Should not have any .js or .md files since we only specified .ts
+      expect(jsCount).toBe(0);
+      expect(mdCount).toBe(0);
+    },
+    TEST_TIMEOUT
+  );
 });

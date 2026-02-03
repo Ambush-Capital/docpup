@@ -43,30 +43,45 @@ const scanSchema = z
     includeMdx: z.boolean().optional(),
     includeHiddenDirs: z.boolean().optional(),
     excludeDirs: z.array(z.string()).optional(),
+    extensions: z
+      .array(z.string().regex(/^\.[a-zA-Z0-9]+$/, "Extension must start with '.'"))
+      .optional(),
   })
   .optional();
 
-const repoSchema = z.object({
-  name: z
-    .string()
-    .min(1)
-    .regex(
-      repoNamePattern,
-      "Repo name must contain only letters, numbers, '.', '_', or '-'"
-    ),
-  repo: z.string().min(1),
-  sourcePath: z.string().min(1),
-  ref: z.string().min(1).optional(),
-  preprocess: z
-    .object({
-      type: z.literal("sphinx"),
-      workDir: z.string().min(1).optional(),
-      builder: z.literal("markdown").default("markdown"),
-      outputDir: z.string().min(1).default("docpup-build"),
-    })
-    .optional(),
-  scan: scanSchema,
-});
+const repoSchema = z
+  .object({
+    name: z
+      .string()
+      .min(1)
+      .regex(
+        repoNamePattern,
+        "Repo name must contain only letters, numbers, '.', '_', or '-'"
+      ),
+    repo: z.string().min(1),
+    sourcePath: z.string().min(1).optional(),
+    sourcePaths: z.array(z.string().min(1)).min(1).optional(),
+    ref: z.string().min(1).optional(),
+    preprocess: z
+      .object({
+        type: z.literal("sphinx"),
+        workDir: z.string().min(1).optional(),
+        builder: z.literal("markdown").default("markdown"),
+        outputDir: z.string().min(1).default("docpup-build"),
+      })
+      .optional(),
+    scan: scanSchema,
+    contentType: z.enum(["docs", "source"]).optional(),
+  })
+  .refine((data) => data.sourcePath || data.sourcePaths, {
+    message: "Either sourcePath or sourcePaths must be provided",
+  })
+  .refine(
+    (data) => !(data.preprocess && data.sourcePaths && data.sourcePaths.length > 1),
+    {
+      message: "preprocess is not supported with multiple sourcePaths",
+    }
+  );
 
 const configSchema = z.object({
   docsDir: z.string().min(1).default("documentation"),

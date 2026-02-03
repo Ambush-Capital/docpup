@@ -4,13 +4,13 @@ import { execa } from "execa";
 
 export type SparseCheckoutArgs = {
   repoUrl: string;
-  sourcePath: string;
+  sourcePaths: string[];
   ref?: string;
   tempDir: string;
 };
 
 export type SparseCheckoutResult =
-  | { ok: true; checkoutPath: string; ref: string }
+  | { ok: true; checkoutPaths: string[]; ref: string }
   | { ok: false; error: string };
 
 const gitEnv = {
@@ -53,27 +53,60 @@ async function ensureEmptyDir(dir: string) {
   await fs.mkdir(dir, { recursive: true });
 }
 
+function normalizePath(p: string): string {
+  let normalized = p.replace(/\\/g, "/").trim();
+  if (normalized.startsWith("./")) {
+    normalized = normalized.slice(2);
+  }
+  return normalized.replace(/^\/+/, "").replace(/\/+$/, "");
+}
+
+function isLikelyFile(p: string): boolean {
+  return /\.[a-zA-Z0-9]+$/.test(p) && !p.endsWith("/");
+}
+
+function buildNoConePatterns(paths: string[]): string {
+  const patterns = paths.flatMap((p) => {
+    if (!p || p === ".") {
+      return [];
+    }
+    if (isLikelyFile(p)) {
+      return [`/${p}`];
+    }
+    return [`/${p.replace(/\/+$/, "")}/**`];
+  });
+  return patterns.join("\n");
+}
+
 export async function sparseCheckoutRepo(
   args: SparseCheckoutArgs
 ): Promise<SparseCheckoutResult> {
-  const { repoUrl, sourcePath, tempDir } = args;
+  const { repoUrl, sourcePaths, tempDir } = args;
   const requestedRef = args.ref?.trim();
 
-  let normalizedPath = sourcePath.replace(/\\/g, "/").trim();
-  if (normalizedPath.startsWith("./")) {
-    normalizedPath = normalizedPath.slice(2);
-  }
-  normalizedPath = normalizedPath.replace(/^\/+/, "").replace(/\/+$/, "");
-  const isRoot = normalizedPath === "" || normalizedPath === ".";
+  const normalizedPaths = sourcePaths.map(normalizePath);
+  const hasRoot = normalizedPaths.some((p) => p === "" || p === ".");
+  const hasFiles = normalizedPaths.some(isLikelyFile);
 
   try {
     await ensureEmptyDir(tempDir);
     await runGit(["init"], tempDir);
     await runGit(["remote", "add", "origin", repoUrl], tempDir);
 
-    if (!isRoot) {
-      await runGit(["sparse-checkout", "init", "--cone"], tempDir);
-      await runGit(["sparse-checkout", "set", normalizedPath], tempDir);
+    if (!hasRoot) {
+      if (hasFiles) {
+        // No-cone mode for file or mixed path selections
+        await runGit(["sparse-checkout", "init", "--no-cone"], tempDir);
+        const patterns = buildNoConePatterns(normalizedPaths);
+        await fs.writeFile(
+          path.join(tempDir, ".git/info/sparse-checkout"),
+          patterns
+        );
+      } else {
+        // Cone mode for directories only
+        await runGit(["sparse-checkout", "init", "--cone"], tempDir);
+        await runGit(["sparse-checkout", "set", ...normalizedPaths], tempDir);
+      }
     }
 
     let refsToTry: string[] = [];
@@ -94,11 +127,26 @@ export async function sparseCheckoutRepo(
         await runGit(["fetch", "--depth=1", "origin", ref], tempDir);
         await runGit(["checkout", "FETCH_HEAD"], tempDir);
 
-        const checkoutPath = isRoot
-          ? tempDir
-          : path.resolve(tempDir, normalizedPath);
-        await fs.access(checkoutPath);
-        return { ok: true, checkoutPath, ref };
+        const checkoutPaths: string[] = [];
+        for (const normalizedPath of normalizedPaths) {
+          const isRoot = normalizedPath === "" || normalizedPath === ".";
+          const checkoutPath = isRoot
+            ? tempDir
+            : path.resolve(tempDir, normalizedPath);
+          try {
+            await fs.access(checkoutPath);
+            checkoutPaths.push(checkoutPath);
+          } catch {
+            // Path doesn't exist - continue checking others
+          }
+        }
+
+        if (checkoutPaths.length === 0) {
+          lastError = "No requested paths found in repository";
+          continue;
+        }
+
+        return { ok: true, checkoutPaths, ref };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         lastError = message;

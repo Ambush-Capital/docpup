@@ -1,8 +1,11 @@
+export type ContentType = "docs" | "source";
+
 export type ScanConfig = {
   includeMd: boolean;
   includeMdx: boolean;
   includeHiddenDirs?: boolean;
   excludeDirs: string[];
+  extensions?: string[];
 };
 
 export type RepoPreprocessConfig = {
@@ -15,10 +18,12 @@ export type RepoPreprocessConfig = {
 export type RepoConfig = {
   name: string;
   repo: string;
-  sourcePath: string;
+  sourcePath?: string;
+  sourcePaths?: string[];
   ref?: string;
   preprocess?: RepoPreprocessConfig;
   scan?: Partial<ScanConfig>;
+  contentType?: ContentType;
 };
 
 export type DocpupConfig = {
