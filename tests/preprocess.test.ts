@@ -1,14 +1,23 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { execa } from "execa";
 import { runPreprocess } from "../src/preprocess.js";
 import type { RepoConfig } from "../src/types.js";
+
+vi.mock("execa", () => ({
+  execa: vi.fn(async () => ({ stdout: "", stderr: "" })),
+}));
+
+const execaMock = vi.mocked(execa);
 
 describe("runPreprocess html", () => {
   let tempDir: string;
 
   beforeEach(async () => {
+    execaMock.mockReset();
+    execaMock.mockResolvedValue({ stdout: "", stderr: "" } as never);
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "docpup-preprocess-"));
   });
 
@@ -91,6 +100,69 @@ describe("runPreprocess html", () => {
 
     await expect(runPreprocess(tempDir, repo)).rejects.toThrow(
       "produced no markdown files"
+    );
+  });
+});
+
+describe("runPreprocess sphinx", () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    execaMock.mockReset();
+    execaMock.mockResolvedValue({ stdout: "", stderr: "" } as never);
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "docpup-preprocess-"));
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  it("runs sphinx with markdown builder", async () => {
+    const docsDir = path.join(tempDir, "docs");
+    await fs.mkdir(docsDir, { recursive: true });
+
+    const repo: RepoConfig = {
+      name: "django-docs",
+      repo: "https://example.com/repo",
+      sourcePath: "docs",
+      preprocess: {
+        type: "sphinx",
+      },
+    };
+
+    const outputDir = await runPreprocess(tempDir, repo);
+
+    expect(outputDir).toBe(path.join(tempDir, "docpup-build"));
+    expect(execaMock).toHaveBeenCalledWith(
+      "python",
+      ["-m", "sphinx", "-b", "markdown", "docs", "docpup-build"],
+      {
+        cwd: tempDir,
+        stdin: "ignore",
+      }
+    );
+  });
+
+  it("maps missing sphinx dependencies to a clear error", async () => {
+    const docsDir = path.join(tempDir, "docs");
+    await fs.mkdir(docsDir, { recursive: true });
+    execaMock.mockRejectedValueOnce(
+      Object.assign(new Error("Command failed"), {
+        stderr: "No module named sphinx",
+      })
+    );
+
+    const repo: RepoConfig = {
+      name: "django-docs",
+      repo: "https://example.com/repo",
+      sourcePath: "docs",
+      preprocess: {
+        type: "sphinx",
+      },
+    };
+
+    await expect(runPreprocess(tempDir, repo)).rejects.toThrow(
+      "Sphinx is not installed"
     );
   });
 });

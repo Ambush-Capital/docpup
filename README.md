@@ -129,7 +129,7 @@ repos:
 | `sourcePaths` | string[] | One of `sourcePath` or `sourcePaths` | Multiple paths to fetch (directories or single files) |
 | `ref` | string | No | Branch, tag, or commit (auto-detects default branch if not specified) |
 | `contentType` | string | No | `"docs"` (default) or `"source"` - affects index title and warning message |
-| `preprocess` | object | No | Optional preprocess step (currently only Sphinx, single path only) |
+| `preprocess` | object | No | Optional preprocess step (`sphinx` or `html`, single path only) |
 | `scan` | object | No | Per-repo scan overrides (merged with global scan config) |
 
 ### Preprocess
