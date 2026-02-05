@@ -134,7 +134,7 @@ repos:
 
 ### Preprocess
 
-Note that `preprocess` only supports Sphinx for now, but is extensible to utilize any required preprocessor.
+Note that `preprocess` supports Sphinx and HTML today, but is extensible to utilize any required preprocessor.
 
 The Sphinx preprocessor uses ([Sphinx](https://github.com/sphinx-doc/sphinx)) to build docs before scanning.
 This is useful for projects like Django that rely on reStructuredText includes, substitutions, and directives.
@@ -161,6 +161,27 @@ Notes:
 - `builder` must be `markdown` (requires `sphinx-markdown-builder`).
 - `outputDir` must be a non-hidden directory unless `scan.includeHiddenDirs` is true.
 - Preprocess is not supported with multiple `sourcePaths`.
+
+### HTML Preprocess
+
+The HTML preprocessor converts HTML pages into Markdown before scanning and indexing.
+
+```yaml
+repos:
+  - name: python-genai
+    repo: https://github.com/googleapis/python-genai
+    sourcePath: docs
+    preprocess:
+      type: html
+      workDir: docs
+      outputDir: docpup-build
+      rewriteLinks: true
+```
+
+Notes:
+- `workDir` defaults to `sourcePath`.
+- `rewriteLinks` defaults to `true`, converting `.html`/`.htm` links to `.md`.
+- `selector` can be used to target a specific content node (e.g., `main`, `article`, or `#content`).
 
 ### Source Code Indexing
 
