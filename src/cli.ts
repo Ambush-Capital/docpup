@@ -6,12 +6,12 @@ import { Command } from "commander";
 import { createRequire } from "node:module";
 import ora from "ora";
 import pLimit from "p-limit";
-import { execa } from "execa";
 import { loadConfig } from "./config.js";
 import { sparseCheckoutRepo } from "./git.js";
 import { scanDocs, scanMultiplePaths } from "./scanner.js";
 import { buildIndex } from "./indexer.js";
 import { updateGitignore } from "./gitignore.js";
+import { runPreprocess } from "./preprocess.js";
 import type { DocpupConfig, RepoConfig } from "./types.js";
 
 function normalizeSourcePaths(repo: RepoConfig): string[] {
@@ -24,15 +24,6 @@ function normalizeSourcePaths(repo: RepoConfig): string[] {
   throw new Error(`Repo ${repo.name}: either sourcePath or sourcePaths required`);
 }
 
-function getSingleSourcePath(repo: RepoConfig): string {
-  const sourcePaths = normalizeSourcePaths(repo);
-  if (sourcePaths.length !== 1) {
-    throw new Error(
-      `Repo ${repo.name}: preprocess requires a single sourcePath`
-    );
-  }
-  return sourcePaths[0];
-}
 
 const require = createRequire(import.meta.url);
 const packageJson = require("../package.json");
@@ -110,84 +101,6 @@ async function copyDocs(
   }
 }
 
-async function runSphinxPreprocess(
-  checkoutRoot: string,
-  repo: RepoConfig
-): Promise<string> {
-  const preprocess = repo.preprocess;
-  if (!preprocess) {
-    return checkoutRoot;
-  }
-
-  // Preprocess types are intentionally narrow today; extend this switch
-  // when new preprocessors are added.
-  if (preprocess.type !== "sphinx") {
-    throw new Error(`Unsupported preprocess type: ${preprocess.type}`);
-  }
-
-  const builder = preprocess.builder ?? "markdown";
-  if (builder !== "markdown") {
-    throw new Error(
-      `Unsupported sphinx builder: ${builder}. Only "markdown" is allowed.`
-    );
-  }
-
-  const workDir = preprocess.workDir ?? getSingleSourcePath(repo);
-  const outputDir = preprocess.outputDir ?? "docpup-build";
-  const resolvedWorkDir = resolveInside(checkoutRoot, workDir);
-  const resolvedOutputDir = resolveInside(checkoutRoot, outputDir);
-
-  const workDirStat = await fs.stat(resolvedWorkDir).catch(() => null);
-  if (!workDirStat || !workDirStat.isDirectory()) {
-    throw new Error(`Sphinx workDir not found: ${resolvedWorkDir}`);
-  }
-
-  await fs.rm(resolvedOutputDir, { recursive: true, force: true });
-  await fs.mkdir(resolvedOutputDir, { recursive: true });
-
-  const workDirArg = path.relative(checkoutRoot, resolvedWorkDir) || ".";
-  const outputDirArg = path.relative(checkoutRoot, resolvedOutputDir) || ".";
-
-  const formatSphinxFailure = (error: unknown): string => {
-    const err = error as { code?: string; stderr?: string };
-    const message = error instanceof Error ? error.message : String(error);
-    const stderr = err?.stderr ?? "";
-    const combined = `${stderr}\n${message}`.toLowerCase();
-
-    if (err?.code === "ENOENT" || combined.includes("enoent")) {
-      return 'Python not found. Install Python 3 and ensure "python" is on PATH.';
-    }
-
-    if (
-      combined.includes("no module named") &&
-      (combined.includes("sphinx") || combined.includes("sphinx_markdown_builder"))
-    ) {
-      return "Sphinx is not installed. Run: python -m pip install sphinx sphinx-markdown-builder";
-    }
-
-    if (combined.includes("builder name") && combined.includes("markdown")) {
-      return "Markdown builder is unavailable. Install sphinx-markdown-builder and ensure it is accessible to Sphinx.";
-    }
-
-    return message;
-  };
-
-  try {
-    await execa(
-      "python",
-      ["-m", "sphinx", "-b", "markdown", workDirArg, outputDirArg],
-      {
-        cwd: checkoutRoot,
-        stdin: "ignore",
-      }
-    );
-  } catch (error) {
-    const detail = formatSphinxFailure(error);
-    throw new Error(`Sphinx preprocess failed for ${repo.name}: ${detail}`);
-  }
-
-  return resolvedOutputDir;
-}
 
 export type GenerateOptions = {
   config?: string;
@@ -309,11 +222,11 @@ export async function generateDocs(
 
         if (repo.preprocess) {
           // Preprocess only works with single path
-          const scanRoot = await runSphinxPreprocess(tempDir, repo);
+          const scanRoot = await runPreprocess(tempDir, repo);
           tree = await scanDocs(scanRoot, scanConfig);
           if (tree.size === 0) {
             throw new Error(
-              `Sphinx preprocess produced no markdown files for ${repo.name}. Check builder output and scan settings.`
+              `Preprocess produced no markdown files for ${repo.name}. Check output and scan settings.`
             );
           }
           const outputRepoDir = resolveInside(docsRoot, repo.name);

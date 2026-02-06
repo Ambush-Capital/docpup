@@ -23,11 +23,14 @@
     "dist"
   ],
   "dependencies": {
+    "cheerio": "^1.1.2",
     "commander": "^14.0.3",
     "cosmiconfig": "^9.0.0",
     "execa": "^9.6.1",
     "ora": "^9.1.0",
     "p-limit": "^7.2.0",
+    "turndown": "^7.2.1",
+    "turndown-plugin-gfm": "^1.0.2",
     "yaml": "^2.8.2",
     "zod": "^4.3.6"
   },

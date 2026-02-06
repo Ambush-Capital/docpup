@@ -3,20 +3,20 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-vi.mock("execa", () => ({
-  execa: vi.fn(async () => ({ stdout: "", stderr: "" })),
-}));
-
 vi.mock("../src/git.js", () => ({
   sparseCheckoutRepo: vi.fn(async (args: { tempDir: string }) => ({
     ok: true as const,
-    checkoutPath: args.tempDir,
+    checkoutPaths: [args.tempDir],
     ref: "main",
   })),
 }));
 
 vi.mock("../src/scanner.js", () => ({
   scanDocs: vi.fn(async () => new Map()),
+}));
+
+vi.mock("../src/preprocess.js", () => ({
+  runPreprocess: vi.fn(async (tempDir: string) => tempDir),
 }));
 
 import { generateDocs, mergeScanConfig } from "../src/cli.js";
@@ -53,7 +53,7 @@ describe("generateDocs preprocess handling", () => {
     vi.clearAllMocks();
   });
 
-  it("fails when sphinx output has no markdown files", async () => {
+  it("fails when preprocess output has no markdown files", async () => {
     const configPath = path.join(tempDir, "docpup.config.yaml");
     const config = `docsDir: documentation
 indicesDir: documentation/indices

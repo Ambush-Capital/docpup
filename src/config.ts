@@ -65,12 +65,21 @@ const repoSchema = z
     sourcePaths: z.array(z.string().min(1)).min(1).optional(),
     ref: z.string().min(1).optional(),
     preprocess: z
-      .object({
-        type: z.literal("sphinx"),
-        workDir: z.string().min(1).optional(),
-        builder: z.literal("markdown").default("markdown"),
-        outputDir: z.string().min(1).default("docpup-build"),
-      })
+      .discriminatedUnion("type", [
+        z.object({
+          type: z.literal("sphinx"),
+          workDir: z.string().min(1).optional(),
+          builder: z.literal("markdown").default("markdown"),
+          outputDir: z.string().min(1).default("docpup-build"),
+        }),
+        z.object({
+          type: z.literal("html"),
+          workDir: z.string().min(1).optional(),
+          outputDir: z.string().min(1).default("docpup-build"),
+          selector: z.string().min(1).optional(),
+          rewriteLinks: z.boolean().optional(),
+        }),
+      ])
       .optional(),
     scan: scanSchema,
     contentType: z.enum(["docs", "source"]).optional(),

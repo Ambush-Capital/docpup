@@ -8,12 +8,20 @@ export type ScanConfig = {
   extensions?: string[];
 };
 
-export type RepoPreprocessConfig = {
-  type: "sphinx";
-  workDir?: string;
-  builder?: "markdown";
-  outputDir?: string;
-};
+export type RepoPreprocessConfig =
+  | {
+      type: "sphinx";
+      workDir?: string;
+      builder?: "markdown";
+      outputDir?: string;
+    }
+  | {
+      type: "html";
+      workDir?: string;
+      outputDir?: string;
+      selector?: string;
+      rewriteLinks?: boolean;
+    };
 
 export type RepoConfig = {
   name: string;

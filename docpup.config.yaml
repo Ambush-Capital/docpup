@@ -21,3 +21,11 @@ repos:
   - name: hello-world
     repo: https://github.com/octocat/Hello-World
     sourcePath: .
+  - name: python-genai
+    repo: https://github.com/googleapis/python-genai
+    sourcePath: docs
+    preprocess:
+      type: html
+      workDir: docs
+      outputDir: docpup-build
+      rewriteLinks: true
