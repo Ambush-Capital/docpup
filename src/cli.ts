@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -430,9 +431,12 @@ async function main() {
 }
 
 const entrypoint = process.argv[1];
-if (entrypoint && import.meta.url === pathToFileURL(entrypoint).href) {
-  main().catch((error) => {
-    console.error(error);
-    process.exitCode = 1;
-  });
+if (entrypoint) {
+  const resolvedEntrypoint = realpathSync(entrypoint);
+  if (import.meta.url === pathToFileURL(resolvedEntrypoint).href) {
+    main().catch((error) => {
+      console.error(error);
+      process.exitCode = 1;
+    });
+  }
 }
