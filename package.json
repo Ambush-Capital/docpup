@@ -3,6 +3,10 @@
   "version": "0.1.5",
   "description": "CLI for indexing documentation from GitHub repositories.",
   "main": "dist/cli.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ambush-Capital/docpup.git"
+  },
   "scripts": {
     "build": "tsup",
     "dev": "tsx src/cli.ts",
