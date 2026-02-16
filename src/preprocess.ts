@@ -72,17 +72,33 @@ async function runSphinxPreprocess(
     const err = error as { code?: string; stderr?: string };
     const message = error instanceof Error ? error.message : String(error);
     const stderr = err?.stderr ?? "";
-    const combined = `${stderr}\n${message}`.toLowerCase();
+    const combinedRaw = `${stderr}\n${message}`;
+    const combined = combinedRaw.toLowerCase();
 
     if (err?.code === "ENOENT" || combined.includes("enoent")) {
       return 'Python not found. Install Python 3 and ensure "python" is on PATH.';
     }
 
-    if (
-      combined.includes("no module named") &&
-      (combined.includes("sphinx") || combined.includes("sphinx_markdown_builder"))
-    ) {
-      return "Sphinx is not installed. Run: python -m pip install sphinx sphinx-markdown-builder";
+    const missingModuleMatch = combinedRaw.match(
+      /no module named\s+['\"]?([A-Za-z0-9_.-]+)['\"]?/i
+    );
+    if (missingModuleMatch?.[1]) {
+      const missingModule = missingModuleMatch[1].toLowerCase();
+
+      if (missingModule === "sphinx" || missingModule.startsWith("sphinx.")) {
+        return "Sphinx is not installed. Run: python -m pip install sphinx sphinx-markdown-builder";
+      }
+
+      if (
+        missingModule === "sphinx_markdown_builder" ||
+        missingModule.startsWith("sphinx_markdown_builder.")
+      ) {
+        return "Markdown builder is unavailable. Install sphinx-markdown-builder and ensure it is accessible to Sphinx.";
+      }
+
+      if (missingModule.startsWith("sphinx")) {
+        return `A Sphinx dependency appears to be missing (${missingModuleMatch[1]}). Install it in the same Python environment used by "python".`;
+      }
     }
 
     if (combined.includes("builder name") && combined.includes("markdown")) {

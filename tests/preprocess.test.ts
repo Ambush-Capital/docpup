@@ -165,4 +165,50 @@ describe("runPreprocess sphinx", () => {
       "Sphinx is not installed"
     );
   });
+
+  it("maps missing sphinx when stderr uses python path prefix", async () => {
+    const docsDir = path.join(tempDir, "docs");
+    await fs.mkdir(docsDir, { recursive: true });
+    execaMock.mockRejectedValueOnce(
+      Object.assign(new Error("Command failed"), {
+        stderr: "/opt/homebrew/bin/python3.14: No module named sphinx",
+      })
+    );
+
+    const repo: RepoConfig = {
+      name: "django-docs",
+      repo: "https://example.com/repo",
+      sourcePath: "docs",
+      preprocess: {
+        type: "sphinx",
+      },
+    };
+
+    await expect(runPreprocess(tempDir, repo)).rejects.toThrow(
+      "Sphinx is not installed"
+    );
+  });
+
+  it("maps missing sphinx markdown builder module to a clear error", async () => {
+    const docsDir = path.join(tempDir, "docs");
+    await fs.mkdir(docsDir, { recursive: true });
+    execaMock.mockRejectedValueOnce(
+      Object.assign(new Error("Command failed"), {
+        stderr: "No module named 'sphinx_markdown_builder'",
+      })
+    );
+
+    const repo: RepoConfig = {
+      name: "django-docs",
+      repo: "https://example.com/repo",
+      sourcePath: "docs",
+      preprocess: {
+        type: "sphinx",
+      },
+    };
+
+    await expect(runPreprocess(tempDir, repo)).rejects.toThrow(
+      "Markdown builder is unavailable"
+    );
+  });
 });
