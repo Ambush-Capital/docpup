@@ -13,6 +13,7 @@ import { scanDocs, scanMultiplePaths } from "./scanner.js";
 import { buildIndex } from "./indexer.js";
 import { updateGitignore } from "./gitignore.js";
 import { runPreprocess } from "./preprocess.js";
+import { fetchUrlSource } from "./url-fetcher.js";
 import type { DocpupConfig, RepoConfig } from "./types.js";
 
 function normalizeSourcePaths(repo: RepoConfig): string[] {
@@ -203,62 +204,85 @@ export async function generateDocs(
 
       const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "docpup-"));
       try {
-        const sourcePaths = normalizeSourcePaths(repo);
-        const checkout = await sparseCheckoutRepo({
-          repoUrl: repo.repo,
-          sourcePaths,
-          ref: repo.ref,
-          tempDir,
-        });
-
-        if (!checkout.ok) {
-          failed += 1;
-          failures.push({ name: repo.name, error: checkout.error });
-          warn(`Warning: failed to clone ${repo.name}: ${checkout.error}`);
-          return;
-        }
-
         const scanConfig = mergeScanConfig(config.scan, repo.scan);
         let tree: Map<string, string[]>;
 
-        if (repo.preprocess) {
-          // Preprocess only works with single path
-          const scanRoot = await runPreprocess(tempDir, repo);
-          tree = await scanDocs(scanRoot, scanConfig);
+        if (repo.urls) {
+          // URL source: fetch HTML pages and convert to markdown
+          const urlOutputDir = path.join(tempDir, "url-output");
+          await fetchUrlSource({
+            urls: repo.urls,
+            name: repo.name,
+            outputDir: urlOutputDir,
+            selector: repo.selector,
+          });
+
+          tree = await scanDocs(urlOutputDir, scanConfig);
           if (tree.size === 0) {
             throw new Error(
-              `Preprocess produced no markdown files for ${repo.name}. Check output and scan settings.`
+              `URL fetch produced no files for ${repo.name}. Check URLs and scan settings.`
             );
           }
           const outputRepoDir = resolveInside(docsRoot, repo.name);
           await fs.rm(outputRepoDir, { recursive: true, force: true });
           await fs.mkdir(outputRepoDir, { recursive: true });
-          await copyDocs(scanRoot, outputRepoDir, tree);
+          await copyDocs(urlOutputDir, outputRepoDir, tree);
         } else {
-          // Scan and copy from multiple paths
-          tree = await scanMultiplePaths(checkout.checkoutPaths, scanConfig, tempDir);
-          const outputRepoDir = resolveInside(docsRoot, repo.name);
-          await fs.rm(outputRepoDir, { recursive: true, force: true });
-          await fs.mkdir(outputRepoDir, { recursive: true });
+          // Git repo source
+          const sourcePaths = normalizeSourcePaths(repo);
+          const checkout = await sparseCheckoutRepo({
+            repoUrl: repo.repo!,
+            sourcePaths,
+            ref: repo.ref,
+            tempDir,
+          });
 
-          // Copy from each checkout path preserving relative structure
-          for (const checkoutPath of checkout.checkoutPaths) {
-            const relativePath = path.relative(tempDir, checkoutPath);
-            const pathTree = await scanDocs(checkoutPath, scanConfig);
-            if (pathTree.size > 0) {
-              const targetDir =
-                relativePath && relativePath !== "."
-                  ? path.join(outputRepoDir, relativePath)
-                  : outputRepoDir;
-              // Detect if checkoutPath is a single file
-              const pathStat = await fs.stat(checkoutPath);
-              const isSingleFile = pathStat.isFile();
-              if (isSingleFile) {
-                // For single files, the targetDir should be the parent directory
-                const parentDir = path.dirname(targetDir);
-                await copyDocs(checkoutPath, parentDir, pathTree, true);
-              } else {
-                await copyDocs(checkoutPath, targetDir, pathTree);
+          if (!checkout.ok) {
+            failed += 1;
+            failures.push({ name: repo.name, error: checkout.error });
+            warn(`Warning: failed to clone ${repo.name}: ${checkout.error}`);
+            return;
+          }
+
+          if (repo.preprocess) {
+            // Preprocess only works with single path
+            const scanRoot = await runPreprocess(tempDir, repo);
+            tree = await scanDocs(scanRoot, scanConfig);
+            if (tree.size === 0) {
+              throw new Error(
+                `Preprocess produced no markdown files for ${repo.name}. Check output and scan settings.`
+              );
+            }
+            const outputRepoDir = resolveInside(docsRoot, repo.name);
+            await fs.rm(outputRepoDir, { recursive: true, force: true });
+            await fs.mkdir(outputRepoDir, { recursive: true });
+            await copyDocs(scanRoot, outputRepoDir, tree);
+          } else {
+            // Scan and copy from multiple paths
+            tree = await scanMultiplePaths(checkout.checkoutPaths, scanConfig, tempDir);
+            const outputRepoDir = resolveInside(docsRoot, repo.name);
+            await fs.rm(outputRepoDir, { recursive: true, force: true });
+            await fs.mkdir(outputRepoDir, { recursive: true });
+
+            // Copy from each checkout path preserving relative structure
+            for (const checkoutPath of checkout.checkoutPaths) {
+              const relativePath = path.relative(tempDir, checkoutPath);
+              const pathTree = await scanDocs(checkoutPath, scanConfig);
+              if (pathTree.size > 0) {
+                const targetDir =
+                  relativePath && relativePath !== "."
+                    ? path.join(outputRepoDir, relativePath)
+                    : outputRepoDir;
+                // Detect if checkoutPath is a single file
+                const pathStat = await fs.stat(checkoutPath);
+                const isSingleFile = pathStat.isFile();
+                if (isSingleFile) {
+                  // For single files, the targetDir should be the parent directory
+                  const parentDir = path.dirname(targetDir);
+                  await copyDocs(checkoutPath, parentDir, pathTree, true);
+                } else {
+                  await copyDocs(checkoutPath, targetDir, pathTree);
+                }
               }
             }
           }

@@ -60,10 +60,12 @@ const repoSchema = z
         repoNamePattern,
         "Repo name must contain only letters, numbers, '.', '_', or '-'"
       ),
-    repo: z.string().min(1),
+    repo: z.string().min(1).optional(),
+    urls: z.array(z.string().url()).min(1).optional(),
     sourcePath: z.string().min(1).optional(),
     sourcePaths: z.array(z.string().min(1)).min(1).optional(),
     ref: z.string().min(1).optional(),
+    selector: z.string().min(1).optional(),
     preprocess: z
       .discriminatedUnion("type", [
         z.object({
@@ -84,9 +86,21 @@ const repoSchema = z
     scan: scanSchema,
     contentType: z.enum(["docs", "source"]).optional(),
   })
-  .refine((data) => data.sourcePath || data.sourcePaths, {
-    message: "Either sourcePath or sourcePaths must be provided",
+  .refine((data) => Boolean(data.repo) !== Boolean(data.urls), {
+    message: "Exactly one of 'repo' or 'urls' must be provided",
   })
+  .refine((data) => !data.repo || data.sourcePath || data.sourcePaths, {
+    message: "Either sourcePath or sourcePaths must be provided for repo sources",
+  })
+  .refine(
+    (data) =>
+      !data.urls ||
+      (!data.sourcePath && !data.sourcePaths && !data.ref && !data.preprocess),
+    {
+      message:
+        "sourcePath, sourcePaths, ref, and preprocess are not valid with 'urls'",
+    }
+  )
   .refine(
     (data) => !(data.preprocess && data.sourcePaths && data.sourcePaths.length > 1),
     {

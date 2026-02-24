@@ -25,13 +25,15 @@ export type RepoPreprocessConfig =
 
 export type RepoConfig = {
   name: string;
-  repo: string;
+  repo?: string;
+  urls?: string[];
   sourcePath?: string;
   sourcePaths?: string[];
   ref?: string;
   preprocess?: RepoPreprocessConfig;
   scan?: Partial<ScanConfig>;
   contentType?: ContentType;
+  selector?: string;
 };
 
 export type DocpupConfig = {

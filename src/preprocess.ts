@@ -138,7 +138,16 @@ function rewriteHref(href: string): string | null {
   return null;
 }
 
-function selectContent(
+export function createTurndownService(): TurndownService {
+  const turndown = new TurndownService({
+    codeBlockStyle: "fenced",
+    headingStyle: "atx",
+  });
+  turndown.use(gfm);
+  return turndown;
+}
+
+export function selectContent(
   $: cheerio.CheerioAPI,
   selector?: string
 ): cheerio.Cheerio<cheerio.AnyNode> {
@@ -217,11 +226,7 @@ async function runHtmlPreprocess(
     );
   }
 
-  const turndown = new TurndownService({
-    codeBlockStyle: "fenced",
-    headingStyle: "atx",
-  });
-  turndown.use(gfm);
+  const turndown = createTurndownService();
 
   let written = 0;
 
