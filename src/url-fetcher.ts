@@ -62,14 +62,81 @@ function extractTitle($: cheerio.CheerioAPI): string {
   return $("title").first().text().trim() || "untitled";
 }
 
+/**
+ * Build a .md variant of the URL. Handles trailing slashes and existing extensions.
+ * e.g. "https://example.com/docs/overview" → "https://example.com/docs/overview.md"
+ *      "https://example.com/docs/overview.html" → "https://example.com/docs/overview.md"
+ *      "https://example.com/docs/overview/" → "https://example.com/docs/overview.md"
+ * Returns null if the URL already ends in .md
+ */
+export function toMdUrl(url: string): string | null {
+  const parsed = new URL(url);
+  let pathname = parsed.pathname;
+
+  // Strip trailing slash
+  if (pathname.endsWith("/") && pathname.length > 1) {
+    pathname = pathname.slice(0, -1);
+  }
+
+  // Already .md — no variant to try
+  if (pathname.endsWith(".md")) return null;
+
+  // Replace .html/.htm extension, or append .md
+  if (pathname.endsWith(".html")) {
+    pathname = pathname.slice(0, -5) + ".md";
+  } else if (pathname.endsWith(".htm")) {
+    pathname = pathname.slice(0, -4) + ".md";
+  } else {
+    pathname = pathname + ".md";
+  }
+
+  parsed.pathname = pathname;
+  return parsed.toString();
+}
+
+async function fetchMdUrl(url: string): Promise<string | null> {
+  const mdUrl = toMdUrl(url);
+  if (!mdUrl) return null;
+
+  try {
+    const response = await fetch(mdUrl, {
+      headers: { "User-Agent": "docpup/0.1" },
+      redirect: "follow",
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    if (!response.ok) return null;
+
+    const contentType = response.headers.get("content-type") ?? "";
+    // Accept markdown or plain text (many servers serve .md as text/plain)
+    if (
+      contentType.includes("text/markdown") ||
+      contentType.includes("text/x-markdown") ||
+      contentType.includes("text/plain")
+    ) {
+      return response.text();
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchPage(url: string): Promise<PageData> {
-  // Try markdown first — if the server supports it, skip HTML processing entirely
+  // 1. Try Accept: text/markdown header
   const md = await fetchMarkdown(url);
   if (md) {
     return { url, title: extractTitleFromMarkdown(md), markdown: md, kind: "markdown" };
   }
 
-  // Fall back to HTML fetch + conversion
+  // 2. Try .md URL variant (e.g. /overview → /overview.md)
+  const mdFromUrl = await fetchMdUrl(url);
+  if (mdFromUrl) {
+    return { url, title: extractTitleFromMarkdown(mdFromUrl), markdown: mdFromUrl, kind: "markdown" };
+  }
+
+  // 3. Fall back to HTML fetch + conversion
   const html = await fetchHtml(url);
   const $ = cheerio.load(html);
   const title = extractTitle($);

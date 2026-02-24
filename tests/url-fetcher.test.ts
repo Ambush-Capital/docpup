@@ -12,6 +12,7 @@ import {
   slugify,
   findCommonPrefix,
   findCommonSuffix,
+  toMdUrl,
 } from "../src/url-fetcher.js";
 
 function htmlPage(title: string, body: string): string {
@@ -21,16 +22,41 @@ function htmlPage(title: string, body: string): string {
 type UrlMockConfig = {
   markdown?: string;
   html?: string;
+  /** Markdown content served at the .md URL variant (e.g. /overview.md) */
+  mdUrl?: string;
   failStatus?: number;
 };
 
 /**
  * Set up argument-aware fetch mocks. Routes responses by URL and Accept header,
  * so concurrent fetches resolve correctly regardless of call order.
+ * Also handles .md URL variants: if config has `mdUrl`, the corresponding
+ * .md URL will serve that markdown content.
  */
 function setupMocks(urlMap: Record<string, UrlMockConfig>) {
+  // Build a secondary map for .md URL variants
+  const mdUrlMap = new Map<string, string>();
+  for (const [url, config] of Object.entries(urlMap)) {
+    if (config.mdUrl) {
+      const mdUrl = toMdUrl(url);
+      if (mdUrl) mdUrlMap.set(mdUrl, config.mdUrl);
+    }
+  }
+
   mockFetch.mockImplementation(async (url: string, init?: { headers?: Record<string, string> }) => {
     const accept = init?.headers?.Accept ?? "";
+
+    // Check if this is a .md URL variant request
+    const mdContent = mdUrlMap.get(url);
+    if (mdContent) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => mdContent,
+        headers: new Headers({ "content-type": "text/plain" }),
+      };
+    }
+
     const config = urlMap[url];
 
     if (!config || config.failStatus) {
@@ -155,6 +181,27 @@ describe("fetchUrlSource", () => {
     expect(content).toContain("HTML content");
   });
 
+  it("uses .md URL variant when available", async () => {
+    setupMocks({
+      "https://example.com/docs/overview": {
+        mdUrl: "# Overview\n\nMarkdown from .md URL",
+        html: htmlPage("Overview", "<h1>Overview</h1><p>HTML version</p>"),
+      },
+    });
+
+    const outputDir = path.join(tempDir, "output");
+    await fetchUrlSource({
+      urls: ["https://example.com/docs/overview"],
+      name: "test-docs",
+      outputDir,
+    });
+
+    const files = await fs.readdir(outputDir);
+    const content = await fs.readFile(path.join(outputDir, files[0]), "utf8");
+    // Should use the .md URL content, not the HTML fallback
+    expect(content).toBe("# Overview\n\nMarkdown from .md URL");
+  });
+
   it("strips nav, header, and footer elements", async () => {
     setupMocks({
       "https://example.com/page": {
@@ -261,8 +308,8 @@ describe("fetchUrlSource", () => {
       outputDir,
     });
 
-    // 2 calls: markdown attempt + HTML fallback, but only for the one unique URL
-    expect(mockFetch).toHaveBeenCalledTimes(2);
+    // 3 calls: markdown header + .md URL + HTML fallback, but only for the one unique URL
+    expect(mockFetch).toHaveBeenCalledTimes(3);
     const files = await fs.readdir(outputDir);
     expect(files).toHaveLength(1);
   });
@@ -381,5 +428,41 @@ describe("findCommonSuffix", () => {
 
   it("returns empty for no common suffix", () => {
     expect(findCommonSuffix(["Alpha", "Beta"])).toBe("");
+  });
+});
+
+describe("toMdUrl", () => {
+  it("appends .md to a path without extension", () => {
+    expect(toMdUrl("https://example.com/docs/overview")).toBe(
+      "https://example.com/docs/overview.md"
+    );
+  });
+
+  it("replaces .html extension with .md", () => {
+    expect(toMdUrl("https://example.com/docs/overview.html")).toBe(
+      "https://example.com/docs/overview.md"
+    );
+  });
+
+  it("replaces .htm extension with .md", () => {
+    expect(toMdUrl("https://example.com/docs/overview.htm")).toBe(
+      "https://example.com/docs/overview.md"
+    );
+  });
+
+  it("strips trailing slash and appends .md", () => {
+    expect(toMdUrl("https://example.com/docs/overview/")).toBe(
+      "https://example.com/docs/overview.md"
+    );
+  });
+
+  it("returns null if URL already ends in .md", () => {
+    expect(toMdUrl("https://example.com/docs/overview.md")).toBeNull();
+  });
+
+  it("preserves query string and hash", () => {
+    expect(toMdUrl("https://example.com/docs/overview?v=2#section")).toBe(
+      "https://example.com/docs/overview.md?v=2#section"
+    );
   });
 });
