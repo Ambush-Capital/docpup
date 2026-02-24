@@ -234,6 +234,7 @@ describe("resolveSitemapUrls", () => {
   });
 
   it("continues when a child sitemap fails", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     mockFetch
       .mockResolvedValueOnce(xmlResponse(SITEMAP_INDEX_XML))
       .mockRejectedValueOnce(new Error("Network error"))
@@ -244,6 +245,7 @@ describe("resolveSitemapUrls", () => {
     });
 
     expect(urls).toEqual(["https://example.com/docs/en/guides/intro"]);
+    warnSpy.mockRestore();
   });
 
   it("throws when sitemap has no URLs", async () => {

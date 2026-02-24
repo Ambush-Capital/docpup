@@ -257,6 +257,7 @@ describe("fetchUrlSource", () => {
   });
 
   it("handles partial failures gracefully", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     setupMocks({
       "https://example.com/a": {
         html: htmlPage("Page A", "<h1>A</h1><p>Content A</p>"),
@@ -273,9 +274,11 @@ describe("fetchUrlSource", () => {
 
     const files = await fs.readdir(outputDir);
     expect(files).toHaveLength(1);
+    warnSpy.mockRestore();
   });
 
   it("throws when all URLs fail", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     setupMocks({
       "https://example.com/a": { failStatus: 500 },
       "https://example.com/b": { failStatus: 500 },
@@ -289,6 +292,7 @@ describe("fetchUrlSource", () => {
         outputDir,
       })
     ).rejects.toThrow("All URL fetches failed");
+    warnSpy.mockRestore();
   });
 
   it("deduplicates identical URLs", async () => {

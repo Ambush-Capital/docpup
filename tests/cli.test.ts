@@ -57,12 +57,15 @@ describe("mergeScanConfig", () => {
 
 describe("generateDocs preprocess handling", () => {
   let tempDir: string;
+  let warnSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(async () => {
+    warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "docpup-cli-test-"));
   });
 
   afterEach(async () => {
+    warnSpy.mockRestore();
     await fs.rm(tempDir, { recursive: true, force: true });
     vi.clearAllMocks();
   });
@@ -102,12 +105,15 @@ repos:
 
 describe("generateDocs URL source handling", () => {
   let tempDir: string;
+  let warnSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(async () => {
+    warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "docpup-cli-test-"));
   });
 
   afterEach(async () => {
+    warnSpy.mockRestore();
     await fs.rm(tempDir, { recursive: true, force: true });
     vi.clearAllMocks();
   });
@@ -144,12 +150,15 @@ repos:
 
 describe("generateDocs sitemap source handling", () => {
   let tempDir: string;
+  let warnSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(async () => {
+    warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "docpup-cli-test-"));
   });
 
   afterEach(async () => {
+    warnSpy.mockRestore();
     await fs.rm(tempDir, { recursive: true, force: true });
     vi.clearAllMocks();
   });
