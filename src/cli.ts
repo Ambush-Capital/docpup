@@ -14,6 +14,7 @@ import { buildIndex } from "./indexer.js";
 import { updateGitignore } from "./gitignore.js";
 import { runPreprocess } from "./preprocess.js";
 import { fetchUrlSource } from "./url-fetcher.js";
+import { resolveSitemapUrls } from "./sitemap.js";
 import { toPosix, resolveInside } from "./utils.js";
 import type { DocpupConfig, RepoConfig } from "./types.js";
 
@@ -195,11 +196,26 @@ export async function generateDocs(
         const scanConfig = mergeScanConfig(config.scan, repo.scan);
         let tree: Map<string, string[]>;
 
-        if (repo.urls) {
-          // URL source: fetch HTML pages and convert to markdown
+        if (repo.urls || repo.sitemap) {
+          // URL-based source: explicit URLs or sitemap-resolved URLs
+          let urls: string[];
+          if (repo.sitemap) {
+            urls = await resolveSitemapUrls({
+              sitemapUrl: repo.sitemap,
+              paths: repo.paths,
+            });
+            if (urls.length === 0) {
+              throw new Error(
+                `Sitemap resolved zero URLs for ${repo.name}. Check sitemap URL and path rules.`
+              );
+            }
+          } else {
+            urls = repo.urls!;
+          }
+
           const urlOutputDir = path.join(tempDir, "url-output");
           await fetchUrlSource({
-            urls: repo.urls,
+            urls,
             name: repo.name,
             outputDir: urlOutputDir,
             selector: repo.selector,

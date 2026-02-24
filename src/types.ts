@@ -23,10 +23,17 @@ export type RepoPreprocessConfig =
       rewriteLinks?: boolean;
     };
 
+export type SitemapPathRule = {
+  prefix: string;
+  subs?: string[];
+};
+
 export type RepoConfig = {
   name: string;
   repo?: string;
   urls?: string[];
+  sitemap?: string;
+  paths?: SitemapPathRule[];
   sourcePath?: string;
   sourcePaths?: string[];
   ref?: string;

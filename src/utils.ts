@@ -12,3 +12,17 @@ export function resolveInside(root: string, ...segments: string[]) {
   }
   return resolved;
 }
+
+export function docpupFetch(
+  url: string,
+  options?: { accept?: string }
+): Promise<Response> {
+  return fetch(url, {
+    headers: {
+      "User-Agent": "docpup/0.1",
+      ...(options?.accept ? { Accept: options.accept } : {}),
+    },
+    redirect: "follow",
+    signal: AbortSignal.timeout(30_000),
+  });
+}

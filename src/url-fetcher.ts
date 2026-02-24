@@ -3,6 +3,7 @@ import path from "node:path";
 import pLimit from "p-limit";
 import * as cheerio from "cheerio";
 import { selectContent, createTurndownService } from "./preprocess.js";
+import { docpupFetch } from "./utils.js";
 
 const TITLE_SEPARATORS = [" - ", " | ", ": ", " \u2014 ", " \u2013 "];
 
@@ -19,14 +20,7 @@ type PageData =
   | { url: string; title: string; $: cheerio.CheerioAPI; kind: "html" };
 
 async function fetchMarkdown(url: string): Promise<string | null> {
-  const response = await fetch(url, {
-    headers: {
-      "User-Agent": "docpup/0.1",
-      Accept: "text/markdown",
-    },
-    redirect: "follow",
-    signal: AbortSignal.timeout(30_000),
-  });
+  const response = await docpupFetch(url, { accept: "text/markdown" });
 
   if (!response.ok) return null;
 
@@ -39,14 +33,7 @@ async function fetchMarkdown(url: string): Promise<string | null> {
 }
 
 async function fetchHtml(url: string): Promise<string> {
-  const response = await fetch(url, {
-    headers: {
-      "User-Agent": "docpup/0.1",
-      Accept: "text/html",
-    },
-    redirect: "follow",
-    signal: AbortSignal.timeout(30_000),
-  });
+  const response = await docpupFetch(url, { accept: "text/html" });
 
   if (!response.ok) {
     throw new Error(`HTTP ${response.status} fetching ${url}`);
@@ -101,11 +88,7 @@ async function fetchMdUrl(url: string): Promise<string | null> {
   if (!mdUrl) return null;
 
   try {
-    const response = await fetch(mdUrl, {
-      headers: { "User-Agent": "docpup/0.1" },
-      redirect: "follow",
-      signal: AbortSignal.timeout(30_000),
-    });
+    const response = await docpupFetch(mdUrl);
 
     if (!response.ok) return null;
 

@@ -62,6 +62,16 @@ const repoSchema = z
       ),
     repo: z.string().min(1).optional(),
     urls: z.array(z.string().url()).min(1).optional(),
+    sitemap: z.string().url().optional(),
+    paths: z
+      .array(
+        z.object({
+          prefix: z.string().min(1),
+          subs: z.array(z.string().min(1)).optional(),
+        })
+      )
+      .min(1)
+      .optional(),
     sourcePath: z.string().min(1).optional(),
     sourcePaths: z.array(z.string().min(1)).min(1).optional(),
     ref: z.string().min(1).optional(),
@@ -86,26 +96,42 @@ const repoSchema = z
     scan: scanSchema,
     contentType: z.enum(["docs", "source"]).optional(),
   })
-  .refine((data) => Boolean(data.repo) !== Boolean(data.urls), {
-    message: "Exactly one of 'repo' or 'urls' must be provided",
-  })
-  .refine((data) => !data.repo || data.sourcePath || data.sourcePaths, {
-    message: "Either sourcePath or sourcePaths must be provided for repo sources",
-  })
+  .refine(
+    (data) => {
+      const count = [data.repo, data.urls, data.sitemap].filter(Boolean).length;
+      return count === 1;
+    },
+    { message: "Exactly one of 'repo', 'urls', or 'sitemap' must be provided" }
+  )
+  .refine(
+    (data) => !data.repo || data.sourcePath || data.sourcePaths,
+    { message: "Either sourcePath or sourcePaths must be provided for repo sources" }
+  )
   .refine(
     (data) =>
       !data.urls ||
-      (!data.sourcePath && !data.sourcePaths && !data.ref && !data.preprocess),
+      (!data.sourcePath && !data.sourcePaths && !data.ref && !data.preprocess && !data.paths),
     {
       message:
-        "sourcePath, sourcePaths, ref, and preprocess are not valid with 'urls'",
+        "sourcePath, sourcePaths, ref, preprocess, and paths are not valid with 'urls'",
     }
   )
   .refine(
-    (data) => !(data.preprocess && data.sourcePaths && data.sourcePaths.length > 1),
+    (data) =>
+      !data.sitemap ||
+      (!data.sourcePath && !data.sourcePaths && !data.ref && !data.preprocess),
     {
-      message: "preprocess is not supported with multiple sourcePaths",
+      message:
+        "sourcePath, sourcePaths, ref, and preprocess are not valid with 'sitemap'",
     }
+  )
+  .refine(
+    (data) => !data.paths || data.sitemap,
+    { message: "'paths' is only valid with 'sitemap'" }
+  )
+  .refine(
+    (data) => !(data.preprocess && data.sourcePaths && data.sourcePaths.length > 1),
+    { message: "preprocess is not supported with multiple sourcePaths" }
   );
 
 const configSchema = z.object({
