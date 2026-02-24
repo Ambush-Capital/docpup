@@ -23,15 +23,24 @@ export type RepoPreprocessConfig =
       rewriteLinks?: boolean;
     };
 
+export type SitemapPathRule = {
+  prefix: string;
+  subs?: string[];
+};
+
 export type RepoConfig = {
   name: string;
-  repo: string;
+  repo?: string;
+  urls?: string[];
+  sitemap?: string;
+  paths?: SitemapPathRule[];
   sourcePath?: string;
   sourcePaths?: string[];
   ref?: string;
   preprocess?: RepoPreprocessConfig;
   scan?: Partial<ScanConfig>;
   contentType?: ContentType;
+  selector?: string;
 };
 
 export type DocpupConfig = {

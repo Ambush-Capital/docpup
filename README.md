@@ -11,6 +11,7 @@ Supports:
 - Source code with custom extensions (`.ts`, `.js`, `.py`, etc.)
 - Selective directory fetching (e.g., only `src` and `samples`)
 - Single file fetching (e.g., just `README.md`)
+- Fetching docs directly from URLs (live HTML pages converted to Markdown)
 
 Paths in the config are resolved from the current working directory where you run the CLI.
 
@@ -100,6 +101,22 @@ repos:
     repo: https://github.com/openai/codex
     sourcePaths:
       - sdk/typescript/README.md
+
+  # URL-based documentation fetching
+  - name: claude-docs
+    urls:
+      - https://docs.anthropic.com/en/docs/overview
+      - https://docs.anthropic.com/en/docs/quickstart
+    selector: main
+
+  # Sitemap-based documentation discovery
+  - name: anthropic-api-docs
+    sitemap: https://platform.claude.com/sitemap.xml
+    paths:
+      - prefix: docs/en/api
+        subs:
+          - sdks
+    selector: main
 ```
 
 ### Configuration Options
@@ -124,12 +141,16 @@ repos:
 | Option | Type | Required | Description |
 |--------|------|----------|-------------|
 | `name` | string | Yes | Unique identifier for this repo |
-| `repo` | string | Yes | GitHub repository URL |
-| `sourcePath` | string | One of `sourcePath` or `sourcePaths` | Single path to fetch (use `.` for root) |
-| `sourcePaths` | string[] | One of `sourcePath` or `sourcePaths` | Multiple paths to fetch (directories or single files) |
-| `ref` | string | No | Branch, tag, or commit (auto-detects default branch if not specified) |
+| `repo` | string | No | GitHub repository URL. Exactly one of `repo`, `urls`, or `sitemap` must be provided |
+| `urls` | string[] | No | List of URLs to fetch docs from. Exactly one of `repo`, `urls`, or `sitemap` must be provided |
+| `sitemap` | string | No | Sitemap URL to discover doc pages. Exactly one of `repo`, `urls`, or `sitemap` must be provided |
+| `paths` | object[] | No | Path prefix rules for filtering sitemap URLs (see [Sitemap Sources](#sitemap-sources)). `sitemap` sources only |
+| `selector` | string | No | CSS selector to extract content from HTML pages (e.g., `main`, `article`, `#content`). Used with `urls` and `sitemap` |
+| `sourcePath` | string | No | Single path to fetch (use `.` for root). Required for `repo` sources |
+| `sourcePaths` | string[] | No | Multiple paths to fetch (directories or single files). Required for `repo` sources |
+| `ref` | string | No | Branch, tag, or commit. `repo` sources only (auto-detects default branch if not specified) |
 | `contentType` | string | No | `"docs"` (default) or `"source"` - affects index title and warning message |
-| `preprocess` | object | No | Optional preprocess step (`sphinx` or `html`, single path only) |
+| `preprocess` | object | No | Optional preprocess step (`sphinx` or `html`, single path only). `repo` sources only |
 | `scan` | object | No | Per-repo scan overrides (merged with global scan config) |
 
 ### Preprocess
@@ -218,6 +239,62 @@ repos:
       - README.md
       - docs/CONTRIBUTING.md
 ```
+
+### URL Sources
+
+Docpup can fetch documentation directly from live HTML pages using the `urls` option, as an alternative to cloning a Git repository.
+
+```yaml
+repos:
+  - name: claude-docs
+    urls:
+      - https://docs.anthropic.com/en/docs/overview
+      - https://docs.anthropic.com/en/docs/quickstart
+    selector: main
+```
+
+For each URL, docpup uses a three-tier fetching strategy:
+
+1. Requests the URL with an `Accept: text/markdown` header
+2. Tries a `.md` URL variant (e.g., `/overview` → `/overview.md`)
+3. Falls back to fetching the HTML and converting it to Markdown
+
+Filenames are automatically derived from page titles, with common prefixes/suffixes stripped and collisions resolved by appending a numeric suffix.
+
+Notes:
+- `selector` is optional. When omitted, docpup falls back through common content elements (`main`, `article`, `#content`, `.content`, `body`).
+- `sourcePath`, `sourcePaths`, `ref`, and `preprocess` are not valid with `urls`.
+
+### Sitemap Sources
+
+Docpup can automatically discover documentation URLs from a sitemap.xml, with path prefix filtering to control which pages to include.
+
+```yaml
+repos:
+  - name: anthropic-api-docs
+    sitemap: https://platform.claude.com/sitemap.xml
+    paths:
+      - prefix: docs/en/api
+        subs:
+          - sdks
+          - skills
+    selector: main
+```
+
+The `paths` array controls which URLs from the sitemap are included:
+
+- **First-level children** of each prefix are included automatically (e.g., `docs/en/api/overview`, `docs/en/api/errors`)
+- **Nested paths** are excluded by default (e.g., `docs/en/api/sdks/python`)
+- **`subs`** opts in specific sub-directories at full depth (e.g., `subs: [sdks]` includes `docs/en/api/sdks/python`, `docs/en/api/sdks/typescript`, etc.)
+- The prefix page itself (e.g., `docs/en/api`) is also included if it exists in the sitemap
+
+When `paths` is omitted, all URLs from the sitemap are included without filtering.
+
+Sitemap index files (sitemaps that reference other sitemaps) are handled automatically.
+
+Notes:
+- `sourcePath`, `sourcePaths`, `ref`, and `preprocess` are not valid with `sitemap`.
+- `paths` is only valid with `sitemap`.
 
 ## CLI Usage
 
