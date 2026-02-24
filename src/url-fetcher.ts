@@ -184,10 +184,13 @@ export async function fetchUrlSource(args: UrlFetchArgs): Promise<void> {
   const strippedTitles = stripCommonAffixes(rawTitles);
 
   const usedNames = new Set<string>();
-  const fileNames: string[] = strippedTitles.map((title, i) => {
-    let slug = slugify(title);
-    if (usedNames.has(slug)) {
-      slug = `${slug}-${i}`;
+  const fileNames: string[] = strippedTitles.map((title) => {
+    const baseSlug = slugify(title);
+    let slug = baseSlug;
+    let suffix = 2;
+    while (usedNames.has(slug)) {
+      slug = `${baseSlug}-${suffix}`;
+      suffix += 1;
     }
     usedNames.add(slug);
     return `${slug}.md`;

@@ -266,6 +266,41 @@ describe("fetchUrlSource", () => {
     const files = await fs.readdir(outputDir);
     expect(files).toHaveLength(1);
   });
+
+  it("avoids filename collisions when titles already include numeric suffixes", async () => {
+    setupMocks({
+      "https://example.com/one": {
+        markdown: "# A\n\nfirst",
+      },
+      "https://example.com/two": {
+        markdown: "# A-2\n\nsecond",
+      },
+      "https://example.com/three": {
+        markdown: "# A\n\nthird",
+      },
+    });
+
+    const outputDir = path.join(tempDir, "output");
+    await fetchUrlSource({
+      urls: [
+        "https://example.com/one",
+        "https://example.com/two",
+        "https://example.com/three",
+      ],
+      name: "test-docs",
+      outputDir,
+    });
+
+    const files = (await fs.readdir(outputDir)).sort();
+    expect(files).toEqual(["a-2.md", "a-3.md", "a.md"]);
+
+    const contents = await Promise.all(
+      files.map((file) => fs.readFile(path.join(outputDir, file), "utf8"))
+    );
+    expect(contents.join("\n")).toContain("first");
+    expect(contents.join("\n")).toContain("second");
+    expect(contents.join("\n")).toContain("third");
+  });
 });
 
 describe("stripCommonAffixes", () => {
