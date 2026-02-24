@@ -14,6 +14,7 @@ import { buildIndex } from "./indexer.js";
 import { updateGitignore } from "./gitignore.js";
 import { runPreprocess } from "./preprocess.js";
 import { fetchUrlSource } from "./url-fetcher.js";
+import { toPosix, resolveInside } from "./utils.js";
 import type { DocpupConfig, RepoConfig } from "./types.js";
 
 function normalizeSourcePaths(repo: RepoConfig): string[] {
@@ -30,10 +31,6 @@ function normalizeSourcePaths(repo: RepoConfig): string[] {
 const require = createRequire(import.meta.url);
 const packageJson = require("../package.json");
 
-function toPosix(input: string) {
-  return input.split(path.sep).join("/");
-}
-
 function withTrailingSlash(input: string) {
   return input.endsWith("/") ? input : `${input}/`;
 }
@@ -44,15 +41,6 @@ function toGitignoreDirEntry(root: string, targetDir: string) {
     return undefined;
   }
   return withTrailingSlash(relative);
-}
-
-function resolveInside(root: string, ...segments: string[]) {
-  const resolved = path.resolve(root, ...segments);
-  const relative = path.relative(root, resolved);
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
-    throw new Error(`Resolved path escapes root: ${resolved}`);
-  }
-  return resolved;
 }
 
 function parseOnly(only?: string) {

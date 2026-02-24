@@ -4,6 +4,8 @@ import pLimit from "p-limit";
 import * as cheerio from "cheerio";
 import { selectContent, createTurndownService } from "./preprocess.js";
 
+const TITLE_SEPARATORS = [" - ", " | ", ": ", " \u2014 ", " \u2013 "];
+
 export type UrlFetchArgs = {
   urls: string[];
   name: string;
@@ -152,7 +154,7 @@ export function findCommonPrefix(strings: string[]): string {
   while (i < first.length && first[i] === last[i]) i++;
   const raw = first.slice(0, i);
   // Only strip at a separator boundary
-  const separators = [" - ", " | ", ": ", " \u2014 ", " \u2013 "];
+  const separators = TITLE_SEPARATORS;
   let best = "";
   for (const sep of separators) {
     const idx = raw.lastIndexOf(sep);
@@ -175,7 +177,7 @@ export function findCommonSuffix(strings: string[]): string {
   const rawReversed = first.slice(0, i);
   const raw = [...rawReversed].reverse().join("");
   // Only strip at a separator boundary
-  const separators = [" - ", " | ", ": ", " \u2014 ", " \u2013 "];
+  const separators = TITLE_SEPARATORS;
   let best = "";
   for (const sep of separators) {
     const idx = raw.indexOf(sep);

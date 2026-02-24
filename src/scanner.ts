@@ -1,10 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { DocpupConfig } from "./types.js";
-
-function toPosix(input: string) {
-  return input.split(path.sep).join("/");
-}
+import { toPosix } from "./utils.js";
 
 function buildExtensionSet(scanConfig: DocpupConfig["scan"]): Set<string> {
   const includeExts = new Set<string>();

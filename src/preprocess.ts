@@ -5,25 +5,11 @@ import TurndownService from "turndown";
 import { gfm } from "turndown-plugin-gfm";
 import * as cheerio from "cheerio";
 import type { RepoConfig } from "./types.js";
+import { resolveInside } from "./utils.js";
 
-type HtmlPreprocessConfig = Extract<
-  NonNullable<RepoConfig["preprocess"]>,
-  { type: "html" }
->;
+type HtmlPreprocessConfig = Extract<RepoConfig["preprocess"], { type: "html" }>;
 
-type SphinxPreprocessConfig = Extract<
-  NonNullable<RepoConfig["preprocess"]>,
-  { type: "sphinx" }
->;
-
-function resolveInside(root: string, ...segments: string[]) {
-  const resolved = path.resolve(root, ...segments);
-  const relative = path.relative(root, resolved);
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
-    throw new Error(`Resolved path escapes root: ${resolved}`);
-  }
-  return resolved;
-}
+type SphinxPreprocessConfig = Extract<RepoConfig["preprocess"], { type: "sphinx" }>;
 
 function getSingleSourcePath(repo: RepoConfig): string {
   if (repo.sourcePaths && repo.sourcePaths.length > 0) {
@@ -125,14 +111,10 @@ function rewriteHref(href: string): string | null {
 
   if (!pathPart) return null;
 
-  if (pathPart.toLowerCase().endsWith(".html")) {
-    const newPath = pathPart.slice(0, -5) + ".md";
-    return `${newPath}${query}${hash}`;
-  }
-
-  if (pathPart.toLowerCase().endsWith(".htm")) {
-    const newPath = pathPart.slice(0, -4) + ".md";
-    return `${newPath}${query}${hash}`;
+  const lower = pathPart.toLowerCase();
+  const ext = lower.endsWith(".html") ? ".html" : lower.endsWith(".htm") ? ".htm" : null;
+  if (ext) {
+    return `${pathPart.slice(0, -ext.length)}.md${query}${hash}`;
   }
 
   return null;
