@@ -11,6 +11,7 @@ Supports:
 - Source code with custom extensions (`.ts`, `.js`, `.py`, etc.)
 - Selective directory fetching (e.g., only `src` and `samples`)
 - Single file fetching (e.g., just `README.md`)
+- Fetching docs directly from URLs (live HTML pages converted to Markdown)
 
 Paths in the config are resolved from the current working directory where you run the CLI.
 
@@ -100,6 +101,13 @@ repos:
     repo: https://github.com/openai/codex
     sourcePaths:
       - sdk/typescript/README.md
+
+  # URL-based documentation fetching
+  - name: claude-docs
+    urls:
+      - https://docs.anthropic.com/en/docs/overview
+      - https://docs.anthropic.com/en/docs/quickstart
+    selector: main
 ```
 
 ### Configuration Options
@@ -124,12 +132,14 @@ repos:
 | Option | Type | Required | Description |
 |--------|------|----------|-------------|
 | `name` | string | Yes | Unique identifier for this repo |
-| `repo` | string | Yes | GitHub repository URL |
-| `sourcePath` | string | One of `sourcePath` or `sourcePaths` | Single path to fetch (use `.` for root) |
-| `sourcePaths` | string[] | One of `sourcePath` or `sourcePaths` | Multiple paths to fetch (directories or single files) |
-| `ref` | string | No | Branch, tag, or commit (auto-detects default branch if not specified) |
+| `repo` | string | No | GitHub repository URL. Exactly one of `repo` or `urls` must be provided |
+| `urls` | string[] | No | List of URLs to fetch docs from. Exactly one of `repo` or `urls` must be provided |
+| `selector` | string | No | CSS selector to extract content from HTML pages (e.g., `main`, `article`, `#content`). Used with `urls` |
+| `sourcePath` | string | No | Single path to fetch (use `.` for root). Required for `repo` sources |
+| `sourcePaths` | string[] | No | Multiple paths to fetch (directories or single files). Required for `repo` sources |
+| `ref` | string | No | Branch, tag, or commit. `repo` sources only (auto-detects default branch if not specified) |
 | `contentType` | string | No | `"docs"` (default) or `"source"` - affects index title and warning message |
-| `preprocess` | object | No | Optional preprocess step (`sphinx` or `html`, single path only) |
+| `preprocess` | object | No | Optional preprocess step (`sphinx` or `html`, single path only). `repo` sources only |
 | `scan` | object | No | Per-repo scan overrides (merged with global scan config) |
 
 ### Preprocess
@@ -218,6 +228,31 @@ repos:
       - README.md
       - docs/CONTRIBUTING.md
 ```
+
+### URL Sources
+
+Docpup can fetch documentation directly from live HTML pages using the `urls` option, as an alternative to cloning a Git repository.
+
+```yaml
+repos:
+  - name: claude-docs
+    urls:
+      - https://docs.anthropic.com/en/docs/overview
+      - https://docs.anthropic.com/en/docs/quickstart
+    selector: main
+```
+
+For each URL, docpup uses a three-tier fetching strategy:
+
+1. Requests the URL with an `Accept: text/markdown` header
+2. Tries a `.md` URL variant (e.g., `/overview` → `/overview.md`)
+3. Falls back to fetching the HTML and converting it to Markdown
+
+Filenames are automatically derived from page titles, with common prefixes/suffixes stripped and collisions resolved by appending a numeric suffix.
+
+Notes:
+- `selector` is optional. When omitted, docpup falls back through common content elements (`main`, `article`, `#content`, `.content`, `body`).
+- `sourcePath`, `sourcePaths`, `ref`, and `preprocess` are not valid with `urls`.
 
 ## CLI Usage
 
