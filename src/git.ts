@@ -13,6 +13,16 @@ export type SparseCheckoutResult =
   | { ok: true; checkoutPaths: string[]; ref: string }
   | { ok: false; error: string };
 
+export type ResolvedGitRef =
+  | {
+      ok: true;
+      requestedRef?: string;
+      resolvedRef: string;
+      commitSha: string;
+      isPinnedCommit: boolean;
+    }
+  | { ok: false; error: string };
+
 const gitEnv = {
   ...process.env,
   GIT_TERMINAL_PROMPT: "0",
@@ -45,6 +55,77 @@ async function getDefaultBranch(cwd: string): Promise<string | null> {
     return match ? match[1] : null;
   } catch {
     return null;
+  }
+}
+
+function isCommitSha(ref: string) {
+  return /^[0-9a-f]{40}$/i.test(ref.trim());
+}
+
+export async function resolveGitRef(args: {
+  repoUrl: string;
+  ref?: string;
+}): Promise<ResolvedGitRef> {
+  const requestedRef = args.ref?.trim();
+  if (requestedRef && isCommitSha(requestedRef)) {
+    return {
+      ok: true,
+      requestedRef,
+      resolvedRef: requestedRef,
+      commitSha: requestedRef,
+      isPinnedCommit: true,
+    };
+  }
+
+  try {
+    if (!requestedRef) {
+      const result = await execa(
+        "git",
+        ["ls-remote", "--symref", args.repoUrl, "HEAD"],
+        {
+          env: gitEnv,
+          stdin: "ignore",
+        }
+      );
+      const lines = result.stdout.split(/\r?\n/).filter(Boolean);
+      const refLine = lines.find((line) => line.startsWith("ref: "));
+      const refMatch = refLine?.match(/^ref:\s+refs\/heads\/([^\s]+)\s+HEAD$/);
+      const shaLine = lines.find((line) => /^[0-9a-f]{40}\s+HEAD$/i.test(line));
+      const shaMatch = shaLine?.match(/^([0-9a-f]{40})\s+HEAD$/i);
+      if (!refMatch?.[1] || !shaMatch?.[1]) {
+        return { ok: false, error: "Unable to resolve remote default branch." };
+      }
+      return {
+        ok: true,
+        requestedRef: undefined,
+        resolvedRef: refMatch[1],
+        commitSha: shaMatch[1],
+        isPinnedCommit: false,
+      };
+    }
+
+    const result = await execa("git", ["ls-remote", "--refs", args.repoUrl, requestedRef], {
+      env: gitEnv,
+      stdin: "ignore",
+    });
+    const line = result.stdout
+      .split(/\r?\n/)
+      .map((entry) => entry.trim())
+      .find(Boolean);
+    const match = line?.match(/^([0-9a-f]{40})\s+/i);
+    if (!match?.[1]) {
+      return { ok: false, error: `Unable to resolve remote ref: ${requestedRef}` };
+    }
+    return {
+      ok: true,
+      requestedRef,
+      resolvedRef: requestedRef,
+      commitSha: match[1],
+      isPinnedCommit: false,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, error: message };
   }
 }
 

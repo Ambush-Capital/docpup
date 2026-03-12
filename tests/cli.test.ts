@@ -4,6 +4,13 @@ import os from "node:os";
 import path from "node:path";
 
 vi.mock("../src/git.js", () => ({
+  resolveGitRef: vi.fn(async (args: { ref?: string }) => ({
+    ok: true as const,
+    requestedRef: args.ref?.trim(),
+    resolvedRef: args.ref?.trim() || "main",
+    commitSha: "1111111111111111111111111111111111111111",
+    isPinnedCommit: false,
+  })),
   sparseCheckoutRepo: vi.fn(async (args: { tempDir: string }) => ({
     ok: true as const,
     checkoutPaths: [args.tempDir],
@@ -13,6 +20,7 @@ vi.mock("../src/git.js", () => ({
 
 vi.mock("../src/scanner.js", () => ({
   scanDocs: vi.fn(async () => new Map()),
+  scanMultiplePaths: vi.fn(async () => new Map()),
 }));
 
 vi.mock("../src/preprocess.js", () => ({
@@ -32,8 +40,14 @@ vi.mock("../src/sitemap.js", () => ({
 
 import { generateDocs, mergeScanConfig } from "../src/cli.js";
 import { fetchUrlSource } from "../src/url-fetcher.js";
-import { sparseCheckoutRepo } from "../src/git.js";
+import { resolveGitRef, sparseCheckoutRepo } from "../src/git.js";
 import { resolveSitemapUrls } from "../src/sitemap.js";
+import { scanDocs, scanMultiplePaths } from "../src/scanner.js";
+
+const resolveGitRefMock = vi.mocked(resolveGitRef);
+const sparseCheckoutRepoMock = vi.mocked(sparseCheckoutRepo);
+const scanDocsMock = vi.mocked(scanDocs);
+const scanMultiplePathsMock = vi.mocked(scanMultiplePaths);
 
 describe("mergeScanConfig", () => {
   it("merges excludeDirs and overrides flags", () => {
@@ -55,6 +69,179 @@ describe("mergeScanConfig", () => {
   });
 });
 
+describe("generateDocs git lockfile handling", () => {
+  let tempDir: string;
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(async () => {
+    warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "docpup-cli-test-"));
+    scanDocsMock.mockImplementation(async () => new Map([["", ["README.md"]]]));
+    scanMultiplePathsMock.mockImplementation(async () => new Map([["", ["README.md"]]]));
+    sparseCheckoutRepoMock.mockImplementation(async (args: { tempDir: string }) => {
+      await fs.writeFile(path.join(args.tempDir, "README.md"), "# Hello\n", "utf8");
+      return {
+        ok: true as const,
+        checkoutPaths: [args.tempDir],
+        ref: "main",
+      };
+    });
+    resolveGitRefMock.mockResolvedValue({
+      ok: true,
+      requestedRef: undefined,
+      resolvedRef: "main",
+      commitSha: "1111111111111111111111111111111111111111",
+      isPinnedCommit: false,
+    });
+  });
+
+  afterEach(async () => {
+    warnSpy.mockRestore();
+    await fs.rm(tempDir, { recursive: true, force: true });
+    vi.clearAllMocks();
+  });
+
+  it("writes docpup-lock.json after a successful git run", async () => {
+    const configPath = path.join(tempDir, "docpup.config.yaml");
+    const config = `docsDir: documentation
+indicesDir: documentation/indices
+gitignore:
+  addDocsDir: false
+  addIndexFiles: false
+repos:
+  - name: axum
+    repo: https://github.com/tokio-rs/axum
+    sourcePath: .
+`;
+
+    await fs.writeFile(configPath, config, "utf8");
+
+    const summary = await generateDocs({
+      config: configPath,
+      cwd: tempDir,
+      concurrency: 1,
+    });
+
+    expect(summary.failed).toBe(0);
+    expect(summary.skipped).toBe(0);
+    expect(sparseCheckoutRepoMock).toHaveBeenCalledTimes(1);
+
+    const lockfile = JSON.parse(
+      await fs.readFile(path.join(tempDir, "docpup-lock.json"), "utf8")
+    ) as {
+      repos: Record<string, { commitSha: string; resolvedRef: string }>;
+    };
+    expect(lockfile.repos.axum?.commitSha).toBe(
+      "1111111111111111111111111111111111111111"
+    );
+    expect(lockfile.repos.axum?.resolvedRef).toBe("main");
+  });
+
+  it("skips unchanged git repos when lockfile and outputs match", async () => {
+    const configPath = path.join(tempDir, "docpup.config.yaml");
+    const config = `docsDir: documentation
+indicesDir: documentation/indices
+gitignore:
+  addDocsDir: false
+  addIndexFiles: false
+repos:
+  - name: axum
+    repo: https://github.com/tokio-rs/axum
+    sourcePath: .
+`;
+
+    await fs.writeFile(configPath, config, "utf8");
+
+    await generateDocs({
+      config: configPath,
+      cwd: tempDir,
+      concurrency: 1,
+    });
+    sparseCheckoutRepoMock.mockClear();
+
+    const summary = await generateDocs({
+      config: configPath,
+      cwd: tempDir,
+      concurrency: 1,
+    });
+
+    expect(summary.failed).toBe(0);
+    expect(summary.skipped).toBe(1);
+    expect(summary.succeeded).toBe(1);
+    expect(sparseCheckoutRepoMock).not.toHaveBeenCalled();
+  });
+
+  it("rebuilds when refresh is requested even if the lockfile matches", async () => {
+    const configPath = path.join(tempDir, "docpup.config.yaml");
+    const config = `docsDir: documentation
+indicesDir: documentation/indices
+gitignore:
+  addDocsDir: false
+  addIndexFiles: false
+repos:
+  - name: axum
+    repo: https://github.com/tokio-rs/axum
+    sourcePath: .
+`;
+
+    await fs.writeFile(configPath, config, "utf8");
+
+    await generateDocs({
+      config: configPath,
+      cwd: tempDir,
+      concurrency: 1,
+    });
+    sparseCheckoutRepoMock.mockClear();
+
+    const summary = await generateDocs({
+      config: configPath,
+      cwd: tempDir,
+      concurrency: 1,
+      refresh: true,
+    });
+
+    expect(summary.skipped).toBe(0);
+    expect(sparseCheckoutRepoMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("rebuilds when outputs are missing even if the lockfile matches", async () => {
+    const configPath = path.join(tempDir, "docpup.config.yaml");
+    const config = `docsDir: documentation
+indicesDir: documentation/indices
+gitignore:
+  addDocsDir: false
+  addIndexFiles: false
+repos:
+  - name: axum
+    repo: https://github.com/tokio-rs/axum
+    sourcePath: .
+`;
+
+    await fs.writeFile(configPath, config, "utf8");
+
+    await generateDocs({
+      config: configPath,
+      cwd: tempDir,
+      concurrency: 1,
+    });
+
+    await fs.rm(path.join(tempDir, "documentation", "axum"), {
+      recursive: true,
+      force: true,
+    });
+    sparseCheckoutRepoMock.mockClear();
+
+    const summary = await generateDocs({
+      config: configPath,
+      cwd: tempDir,
+      concurrency: 1,
+    });
+
+    expect(summary.skipped).toBe(0);
+    expect(sparseCheckoutRepoMock).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("generateDocs preprocess handling", () => {
   let tempDir: string;
   let warnSpy: ReturnType<typeof vi.spyOn>;
@@ -62,6 +249,8 @@ describe("generateDocs preprocess handling", () => {
   beforeEach(async () => {
     warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "docpup-cli-test-"));
+    scanDocsMock.mockImplementation(async () => new Map());
+    scanMultiplePathsMock.mockImplementation(async () => new Map());
   });
 
   afterEach(async () => {
@@ -110,6 +299,8 @@ describe("generateDocs URL source handling", () => {
   beforeEach(async () => {
     warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "docpup-cli-test-"));
+    scanDocsMock.mockImplementation(async () => new Map());
+    scanMultiplePathsMock.mockImplementation(async () => new Map());
   });
 
   afterEach(async () => {
@@ -155,6 +346,8 @@ describe("generateDocs sitemap source handling", () => {
   beforeEach(async () => {
     warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "docpup-cli-test-"));
+    scanDocsMock.mockImplementation(async () => new Map());
+    scanMultiplePathsMock.mockImplementation(async () => new Map());
   });
 
   afterEach(async () => {
