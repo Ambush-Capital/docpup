@@ -8,7 +8,7 @@ import { createRequire } from "node:module";
 import ora from "ora";
 import pLimit from "p-limit";
 import { loadConfig } from "./config.js";
-import { sparseCheckoutRepo } from "./git.js";
+import { resolveGitRef, sparseCheckoutRepo } from "./git.js";
 import { scanDocs, scanMultiplePaths } from "./scanner.js";
 import { buildIndex } from "./indexer.js";
 import { updateGitignore } from "./gitignore.js";
@@ -17,6 +17,11 @@ import { fetchUrlSource } from "./url-fetcher.js";
 import { resolveSitemapUrls } from "./sitemap.js";
 import { toPosix, resolveInside } from "./utils.js";
 import type { DocpupConfig, RepoConfig } from "./types.js";
+import {
+  buildProcessingHash,
+  loadLockfile,
+  saveLockfile,
+} from "./lockfile.js";
 
 function normalizeSourcePaths(repo: RepoConfig): string[] {
   if (repo.sourcePaths && repo.sourcePaths.length > 0) {
@@ -97,21 +102,50 @@ export type GenerateOptions = {
   config?: string;
   only?: string;
   concurrency?: number;
+  refresh?: boolean;
   cwd?: string;
 };
 
 export type GenerateSummary = {
   total: number;
   succeeded: number;
+  skipped: number;
   failed: number;
   failures: { name: string; error: string }[];
 };
+
+async function pathExists(targetPath: string) {
+  try {
+    await fs.access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function repoOutputsExist(args: {
+  docsRoot: string;
+  indicesRoot: string;
+  repoName: string;
+}) {
+  const outputRepoDir = resolveInside(args.docsRoot, args.repoName);
+  const indexFilePath = resolveInside(
+    args.indicesRoot,
+    `${args.repoName}-index.md`
+  );
+  const [docsExists, indexExists] = await Promise.all([
+    pathExists(outputRepoDir),
+    pathExists(indexFilePath),
+  ]);
+  return docsExists && indexExists;
+}
 
 export async function generateDocs(
   options: GenerateOptions
 ): Promise<GenerateSummary> {
   const repoRoot = options.cwd ?? process.cwd();
   const { config } = await loadConfig(options.config, repoRoot);
+  const lockfile = await loadLockfile(repoRoot);
   const onlyNames = parseOnly(options.only);
 
   let repos = config.repos;
@@ -141,6 +175,7 @@ export async function generateDocs(
   let started = 0;
   let completed = 0;
   let succeeded = 0;
+  let skipped = 0;
   let failed = 0;
   const failures: { name: string; error: string }[] = [];
 
@@ -195,6 +230,14 @@ export async function generateDocs(
       try {
         const scanConfig = mergeScanConfig(config.scan, repo.scan);
         let tree: Map<string, string[]>;
+        let gitLockState:
+          | {
+              requestedRef?: string;
+              resolvedRef: string;
+              commitSha: string;
+              processingHash: string;
+            }
+          | undefined;
 
         if (repo.urls || repo.sitemap) {
           // URL-based source: explicit URLs or sitemap-resolved URLs
@@ -234,10 +277,48 @@ export async function generateDocs(
         } else {
           // Git repo source
           const sourcePaths = normalizeSourcePaths(repo);
+          const processingHash = buildProcessingHash(repo, scanConfig);
+          const remoteState = await resolveGitRef({
+            repoUrl: repo.repo!,
+            ref: repo.ref,
+          });
+          if (!remoteState.ok) {
+            failed += 1;
+            failures.push({ name: repo.name, error: remoteState.error });
+            warn(`Warning: failed to resolve ${repo.name}: ${remoteState.error}`);
+            return;
+          }
+
+          const lockedRepo = lockfile.repos[repo.name];
+          const outputsExist = await repoOutputsExist({
+            docsRoot,
+            indicesRoot,
+            repoName: repo.name,
+          });
+          const lockMatches =
+            lockedRepo?.repoUrl === repo.repo &&
+            lockedRepo.requestedRef === remoteState.requestedRef &&
+            lockedRepo.resolvedRef === remoteState.resolvedRef &&
+            lockedRepo.commitSha === remoteState.commitSha &&
+            lockedRepo.processingHash === processingHash;
+
+          if (!options.refresh && lockMatches && outputsExist) {
+            skipped += 1;
+            succeeded += 1;
+            return;
+          }
+
+          gitLockState = {
+            requestedRef: remoteState.requestedRef,
+            resolvedRef: remoteState.resolvedRef,
+            commitSha: remoteState.commitSha,
+            processingHash,
+          };
+
           const checkout = await sparseCheckoutRepo({
             repoUrl: repo.repo!,
             sourcePaths,
-            ref: repo.ref,
+            ref: remoteState.resolvedRef,
             tempDir,
           });
 
@@ -305,6 +386,17 @@ export async function generateDocs(
         await fs.mkdir(path.dirname(indexFilePath), { recursive: true });
         await fs.writeFile(indexFilePath, indexContents);
 
+        if (repo.repo && gitLockState) {
+          lockfile.repos[repo.name] = {
+            name: repo.name,
+            repoUrl: repo.repo,
+            requestedRef: gitLockState.requestedRef,
+            resolvedRef: gitLockState.resolvedRef,
+            commitSha: gitLockState.commitSha,
+            processingHash: gitLockState.processingHash,
+          };
+        }
+
         succeeded += 1;
       } catch (error) {
         failed += 1;
@@ -320,15 +412,17 @@ export async function generateDocs(
   );
 
   await Promise.all(tasks);
+  await saveLockfile(repoRoot, lockfile);
   await gitignoreQueue;
 
   spinner.succeed(
-    `Processed ${repos.length} repos (${succeeded} succeeded, ${failed} failed).`
+    `Processed ${repos.length} repos (${succeeded} succeeded, ${skipped} skipped, ${failed} failed).`
   );
 
   return {
     total: repos.length,
     succeeded,
+    skipped,
     failed,
     failures,
   };
@@ -351,6 +445,7 @@ async function main() {
       "Comma-separated repo names to process (e.g. nextjs,axum)"
     )
     .option("--concurrency <number>", "Number of repos to process in parallel")
+    .option("--refresh", "Force git repos to rebuild even if unchanged")
     .action(async (options: GenerateOptions) => {
       try {
         await generateDocs({
@@ -360,6 +455,7 @@ async function main() {
             options.concurrency !== undefined
               ? Number(options.concurrency)
               : undefined,
+          refresh: options.refresh,
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

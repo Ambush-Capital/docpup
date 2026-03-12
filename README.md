@@ -15,6 +15,8 @@ Supports:
 
 Paths in the config are resolved from the current working directory where you run the CLI.
 
+For git repos, docpup keeps a root-level `docpup-lock.json` file. Each run resolves the current remote commit first and skips re-downloading repos whose commit, generation inputs, and outputs are unchanged.
+
 ## Installation
 
 ```bash
@@ -47,7 +49,7 @@ repos:
 docpup generate
 ```
 
-3. Find your docs in `documentation/nextjs/` and the index in `documentation/indices/nextjs-index.md`.
+3. Find your docs in `documentation/nextjs/`, the index in `documentation/indices/nextjs-index.md`, and the git freshness metadata in `docpup-lock.json`.
 
 ## Configuration
 
@@ -311,6 +313,9 @@ docpup generate --only nextjs,temporal
 # Override concurrency
 docpup generate --concurrency 4
 
+# Force git repos to rebuild even if unchanged
+docpup generate --refresh
+
 # Show help
 docpup --help
 
@@ -347,6 +352,8 @@ For private repositories, ensure you have access configured in your git environm
 ## Error Handling
 
 - If a repository fails to clone, docpup logs a warning and continues with other repos
+- If a git repo is unchanged and its outputs still exist, docpup skips downloading it and reuses the existing generated files
+- If `docpup-lock.json` matches but the docs or index files are missing, docpup downloads the repo again to rebuild them
 - The CLI always exits with status 0 if it can continue running (non-fatal errors)
 - Invalid configuration or unexpected errors result in non-zero exit
 
