@@ -110,6 +110,7 @@ repos:
       - https://docs.anthropic.com/en/docs/overview
       - https://docs.anthropic.com/en/docs/quickstart
     selector: main
+    password: ${DOCS_PASSWORD}
 
   # Sitemap-based documentation discovery
   - name: anthropic-api-docs
@@ -148,6 +149,7 @@ repos:
 | `sitemap` | string | No | Sitemap URL to discover doc pages. Exactly one of `repo`, `urls`, or `sitemap` must be provided |
 | `paths` | object[] | No | Path prefix rules for filtering sitemap URLs (see [Sitemap Sources](#sitemap-sources)). `sitemap` sources only |
 | `selector` | string | No | CSS selector to extract content from HTML pages (e.g., `main`, `article`, `#content`). Used with `urls` and `sitemap` |
+| `password` | string | No | Password for protected doc sites (e.g., Readme.com). Supports `${ENV_VAR}` interpolation. `urls` or `sitemap` sources only |
 | `sourcePath` | string | No | Single path to fetch (use `.` for root). Required for `repo` sources |
 | `sourcePaths` | string[] | No | Multiple paths to fetch (directories or single files). Required for `repo` sources |
 | `ref` | string | No | Branch, tag, or commit. `repo` sources only (auto-detects default branch if not specified) |
@@ -265,6 +267,7 @@ Filenames are automatically derived from page titles, with common prefixes/suffi
 
 Notes:
 - `selector` is optional. When omitted, docpup falls back through common content elements (`main`, `article`, `#content`, `.content`, `body`).
+- `password` can be used to authenticate with password-protected doc sites. Supports `${ENV_VAR}` interpolation for secrets.
 - `sourcePath`, `sourcePaths`, `ref`, and `preprocess` are not valid with `urls`.
 
 ### Sitemap Sources
@@ -296,6 +299,7 @@ Sitemap index files (sitemaps that reference other sitemaps) are handled automat
 
 Notes:
 - `sourcePath`, `sourcePaths`, `ref`, and `preprocess` are not valid with `sitemap`.
+- `password` can be used to authenticate with password-protected doc sites.
 - `paths` is only valid with `sitemap`.
 
 ## CLI Usage
