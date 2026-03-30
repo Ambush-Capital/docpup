@@ -31,6 +31,14 @@ vi.mock("../src/url-fetcher.js", () => ({
   fetchUrlSource: vi.fn(async () => {}),
 }));
 
+vi.mock("../src/utils.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/utils.js")>();
+  return {
+    ...actual,
+    authenticateWithPassword: vi.fn(async () => ({ Cookie: "session=test123" })),
+  };
+});
+
 vi.mock("../src/sitemap.js", () => ({
   resolveSitemapUrls: vi.fn(async () => [
     "https://example.com/docs/overview",
@@ -43,6 +51,7 @@ import { fetchUrlSource } from "../src/url-fetcher.js";
 import { resolveGitRef, sparseCheckoutRepo } from "../src/git.js";
 import { resolveSitemapUrls } from "../src/sitemap.js";
 import { scanDocs, scanMultiplePaths } from "../src/scanner.js";
+import { authenticateWithPassword } from "../src/utils.js";
 
 const resolveGitRefMock = vi.mocked(resolveGitRef);
 const sparseCheckoutRepoMock = vi.mocked(sparseCheckoutRepo);
@@ -381,14 +390,108 @@ repos:
     });
 
     expect(resolveSitemapUrls).toHaveBeenCalledTimes(1);
-    expect(resolveSitemapUrls).toHaveBeenCalledWith({
-      sitemapUrl: "https://example.com/sitemap.xml",
-      paths: [{ prefix: "docs/en/api", subs: ["sdks"] }],
-    });
+    expect(resolveSitemapUrls).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sitemapUrl: "https://example.com/sitemap.xml",
+        paths: [{ prefix: "docs/en/api", subs: ["sdks"] }],
+      })
+    );
     expect(fetchUrlSource).toHaveBeenCalledTimes(1);
     expect(sparseCheckoutRepo).not.toHaveBeenCalled();
     // scanDocs returns empty map, so this should fail with "no files"
     expect(summary.failed).toBe(1);
     expect(summary.failures[0]?.error).toContain("URL fetch produced no files");
+  });
+});
+
+describe("generateDocs password authentication", () => {
+  let tempDir: string;
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(async () => {
+    warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "docpup-cli-test-"));
+    scanDocsMock.mockImplementation(async () => new Map());
+    scanMultiplePathsMock.mockImplementation(async () => new Map());
+  });
+
+  afterEach(async () => {
+    warnSpy.mockRestore();
+    await fs.rm(tempDir, { recursive: true, force: true });
+    vi.clearAllMocks();
+  });
+
+  it("authenticates and passes cookies to fetchUrlSource when password is set", async () => {
+    vi.stubEnv("TEST_PASSWORD", "mysecret");
+    const configPath = path.join(tempDir, "docpup.config.yaml");
+    const config = `docsDir: documentation
+indicesDir: documentation/indices
+gitignore:
+  addDocsDir: false
+  addIndexFiles: false
+repos:
+  - name: protected-docs
+    urls:
+      - https://protected.example.com/overview
+    password: "\${TEST_PASSWORD}"
+`;
+
+    await fs.writeFile(configPath, config, "utf8");
+
+    await generateDocs({
+      config: configPath,
+      cwd: tempDir,
+      concurrency: 1,
+    });
+
+    expect(authenticateWithPassword).toHaveBeenCalledWith(
+      "https://protected.example.com",
+      "mysecret"
+    );
+    expect(fetchUrlSource).toHaveBeenCalledWith(
+      expect.objectContaining({
+        headers: { Cookie: "session=test123" },
+      })
+    );
+    vi.unstubAllEnvs();
+  });
+
+  it("passes cookies to resolveSitemapUrls when password is set on sitemap source", async () => {
+    const configPath = path.join(tempDir, "docpup.config.yaml");
+    const config = `docsDir: documentation
+indicesDir: documentation/indices
+gitignore:
+  addDocsDir: false
+  addIndexFiles: false
+repos:
+  - name: protected-sitemap
+    sitemap: https://protected.example.com/sitemap.xml
+    password: plaintext-secret
+    paths:
+      - prefix: docs
+`;
+
+    await fs.writeFile(configPath, config, "utf8");
+
+    await generateDocs({
+      config: configPath,
+      cwd: tempDir,
+      concurrency: 1,
+    });
+
+    expect(authenticateWithPassword).toHaveBeenCalledWith(
+      "https://protected.example.com",
+      "plaintext-secret"
+    );
+    expect(resolveSitemapUrls).toHaveBeenCalledWith(
+      expect.objectContaining({
+        headers: { Cookie: "session=test123" },
+      })
+    );
+    expect(fetchUrlSource).toHaveBeenCalledWith(
+      expect.objectContaining({
+        headers: { Cookie: "session=test123" },
+      })
+    );
   });
 });

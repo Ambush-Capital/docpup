@@ -41,6 +41,7 @@ export type RepoConfig = {
   scan?: Partial<ScanConfig>;
   contentType?: ContentType;
   selector?: string;
+  password?: string;
 };
 
 export type DocpupConfig = {

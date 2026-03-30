@@ -5,6 +5,7 @@ import type { SitemapPathRule } from "./types.js";
 export type SitemapResolveArgs = {
   sitemapUrl: string;
   paths?: SitemapPathRule[];
+  headers?: Record<string, string>;
 };
 
 export function parseSitemapUrls(xml: string): string[] {
@@ -77,8 +78,8 @@ export function filterUrls(
   });
 }
 
-async function fetchSitemap(url: string): Promise<string> {
-  const response = await docpupFetch(url, { accept: "application/xml" });
+async function fetchSitemap(url: string, headers?: Record<string, string>): Promise<string> {
+  const response = await docpupFetch(url, { accept: "application/xml", headers });
 
   if (!response.ok) {
     throw new Error(`HTTP ${response.status} fetching sitemap: ${url}`);
@@ -90,7 +91,7 @@ async function fetchSitemap(url: string): Promise<string> {
 export async function resolveSitemapUrls(
   args: SitemapResolveArgs
 ): Promise<string[]> {
-  const xml = await fetchSitemap(args.sitemapUrl);
+  const xml = await fetchSitemap(args.sitemapUrl, args.headers);
 
   let allUrls: string[];
 
@@ -99,7 +100,7 @@ export async function resolveSitemapUrls(
     const childResults = await Promise.all(
       childSitemapUrls.map(async (childUrl) => {
         try {
-          const childXml = await fetchSitemap(childUrl);
+          const childXml = await fetchSitemap(childUrl, args.headers);
           return parseSitemapUrls(childXml);
         } catch {
           console.warn(`Warning: failed to fetch child sitemap: ${childUrl}`);

@@ -13,14 +13,15 @@ export type UrlFetchArgs = {
   outputDir: string;
   selector?: string;
   concurrency?: number;
+  headers?: Record<string, string>;
 };
 
 type PageData =
   | { url: string; title: string; markdown: string; kind: "markdown" }
   | { url: string; title: string; $: cheerio.CheerioAPI; kind: "html" };
 
-async function fetchMarkdown(url: string): Promise<string | null> {
-  const response = await docpupFetch(url, { accept: "text/markdown" });
+async function fetchMarkdown(url: string, headers?: Record<string, string>): Promise<string | null> {
+  const response = await docpupFetch(url, { accept: "text/markdown", headers });
 
   if (!response.ok) return null;
 
@@ -32,8 +33,8 @@ async function fetchMarkdown(url: string): Promise<string | null> {
   return response.text();
 }
 
-async function fetchHtml(url: string): Promise<string> {
-  const response = await docpupFetch(url, { accept: "text/html" });
+async function fetchHtml(url: string, headers?: Record<string, string>): Promise<string> {
+  const response = await docpupFetch(url, { accept: "text/html", headers });
 
   if (!response.ok) {
     throw new Error(`HTTP ${response.status} fetching ${url}`);
@@ -83,12 +84,12 @@ export function toMdUrl(url: string): string | null {
   return parsed.toString();
 }
 
-async function fetchMdUrl(url: string): Promise<string | null> {
+async function fetchMdUrl(url: string, headers?: Record<string, string>): Promise<string | null> {
   const mdUrl = toMdUrl(url);
   if (!mdUrl) return null;
 
   try {
-    const response = await docpupFetch(mdUrl);
+    const response = await docpupFetch(mdUrl, { headers });
 
     if (!response.ok) return null;
 
@@ -108,21 +109,21 @@ async function fetchMdUrl(url: string): Promise<string | null> {
   }
 }
 
-async function fetchPage(url: string): Promise<PageData> {
+async function fetchPage(url: string, headers?: Record<string, string>): Promise<PageData> {
   // 1. Try Accept: text/markdown header
-  const md = await fetchMarkdown(url);
+  const md = await fetchMarkdown(url, headers);
   if (md) {
     return { url, title: extractTitleFromMarkdown(md), markdown: md, kind: "markdown" };
   }
 
   // 2. Try .md URL variant (e.g. /overview → /overview.md)
-  const mdFromUrl = await fetchMdUrl(url);
+  const mdFromUrl = await fetchMdUrl(url, headers);
   if (mdFromUrl) {
     return { url, title: extractTitleFromMarkdown(mdFromUrl), markdown: mdFromUrl, kind: "markdown" };
   }
 
   // 3. Fall back to HTML fetch + conversion
-  const html = await fetchHtml(url);
+  const html = await fetchHtml(url, headers);
   const $ = cheerio.load(html);
   const title = extractTitle($);
   return { url, title, $, kind: "html" };
@@ -196,7 +197,7 @@ export function slugify(text: string): string {
 }
 
 export async function fetchUrlSource(args: UrlFetchArgs): Promise<void> {
-  const { urls, name, outputDir, selector, concurrency = 5 } = args;
+  const { urls, name, outputDir, selector, concurrency = 5, headers } = args;
   const uniqueUrls = [...new Set(urls)];
   const limit = pLimit(concurrency);
 
@@ -209,7 +210,7 @@ export async function fetchUrlSource(args: UrlFetchArgs): Promise<void> {
   const warnings: string[] = [];
 
   const fetchResults = await Promise.allSettled(
-    uniqueUrls.map((url) => limit(() => fetchPage(url)))
+    uniqueUrls.map((url) => limit(() => fetchPage(url, headers)))
   );
 
   for (let i = 0; i < fetchResults.length; i++) {

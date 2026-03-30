@@ -76,6 +76,7 @@ const repoSchema = z
     sourcePaths: z.array(z.string().min(1)).min(1).optional(),
     ref: z.string().min(1).optional(),
     selector: z.string().min(1).optional(),
+    password: z.string().min(1).optional(),
     preprocess: z
       .discriminatedUnion("type", [
         z.object({
@@ -132,6 +133,10 @@ const repoSchema = z
   .refine(
     (data) => !(data.preprocess && data.sourcePaths && data.sourcePaths.length > 1),
     { message: "preprocess is not supported with multiple sourcePaths" }
+  )
+  .refine(
+    (data) => !data.password || data.urls || data.sitemap,
+    { message: "'password' is only valid with 'urls' or 'sitemap' sources" }
   );
 
 const configSchema = z.object({

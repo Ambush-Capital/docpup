@@ -15,7 +15,7 @@ import { updateGitignore } from "./gitignore.js";
 import { runPreprocess } from "./preprocess.js";
 import { fetchUrlSource } from "./url-fetcher.js";
 import { resolveSitemapUrls } from "./sitemap.js";
-import { toPosix, resolveInside } from "./utils.js";
+import { toPosix, resolveInside, interpolateEnvVars, authenticateWithPassword } from "./utils.js";
 import type { DocpupConfig, RepoConfig } from "./types.js";
 import {
   buildProcessingHash,
@@ -241,11 +241,20 @@ export async function generateDocs(
 
         if (repo.urls || repo.sitemap) {
           // URL-based source: explicit URLs or sitemap-resolved URLs
+          let authHeaders: Record<string, string> | undefined;
+          if (repo.password) {
+            const resolvedPassword = interpolateEnvVars(repo.password);
+            const sourceUrl = repo.sitemap ?? repo.urls![0];
+            const baseUrl = new URL(sourceUrl).origin;
+            authHeaders = await authenticateWithPassword(baseUrl, resolvedPassword);
+          }
+
           let urls: string[];
           if (repo.sitemap) {
             urls = await resolveSitemapUrls({
               sitemapUrl: repo.sitemap,
               paths: repo.paths,
+              headers: authHeaders,
             });
             if (urls.length === 0) {
               throw new Error(
@@ -262,6 +271,7 @@ export async function generateDocs(
             name: repo.name,
             outputDir: urlOutputDir,
             selector: repo.selector,
+            headers: authHeaders,
           });
 
           tree = await scanDocs(urlOutputDir, scanConfig);
